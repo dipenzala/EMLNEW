@@ -26,6 +26,6 @@ export async function GET(req: Request) {
     else { const { data: created, error: insErr } = await admin.from('sender_accounts').insert({ user_id: stateRow.user_id, provider: 'gmail', google_email: gEmail, display_name: me.data.name ?? gEmail, status: 'connected' }).select('id').single(); if (insErr || !created) throw insErr ?? new Error('insert failed'); senderId = created.id; }
     await storeTokens(senderId, { access_token: tokens.access_token, refresh_token: tokens.refresh_token ?? null, expiry_date: tokens.expiry_date ?? null, scope: tokens.scope ?? null });
     log('oauth.connected', { userId: stateRow.user_id, senderId });
-    return NextResponse.redirect(new URL('/senders', req.url));
+    return NextResponse.redirect(new URL('/welcome', req.url));
   } catch (e) { logError('oauth.callback_failed', e); return NextResponse.redirect(new URL(`/help?error=${encodeURIComponent(e instanceof Error ? e.message : 'callback_failed')}`, req.url)); }
 }
