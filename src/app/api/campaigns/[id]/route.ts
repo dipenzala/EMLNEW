@@ -20,3 +20,25 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+
+export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const user = await requireUser();
+  const admin = createSupabaseAdmin();
+
+  // Confirm ownership
+  const { data: owned } = await admin
+    .from('campaigns')
+    .select('id')
+    .eq('id', params.id)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 });
+
+  // Cascade will remove email_jobs (FK on delete cascade)
+  const { error } = await admin.from('campaigns').delete().eq('id', params.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}

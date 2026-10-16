@@ -31,6 +31,13 @@ export default function CampaignsPage() {
     if (r.ok) { push('Archived'); load(); } else push('Failed');
   }
 
+  async function del(id: string, name: string) {
+    if (!confirm(`Permanently delete "${name}"?\n\nThis removes the campaign AND all its queued/sent jobs. Cannot be undone.`)) return;
+    const r = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
+    if (r.ok) { push('Deleted'); load(); }
+    else { const j = await r.json().catch(() => ({})); push(j.error || 'Delete failed'); }
+  }
+
   return (
     <>
       <div className="topbar"><h1>Campaigns</h1><button className="btn btn-primary" onClick={createDraft}>New campaign</button></div>
@@ -49,7 +56,8 @@ export default function CampaignsPage() {
                   <td style={{ display: 'flex', gap: 6 }}>
                     <Link className="btn btn-sm" href={`/campaigns/${c.id}`}>Open</Link>
                     <button className="btn btn-sm" onClick={() => duplicate(c.id)}>Duplicate</button>
-                    <button className="btn btn-sm btn-danger" onClick={() => archive(c.id)}>Archive</button>
+                    <button className="btn btn-sm" onClick={() => archive(c.id)}>Archive</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => del(c.id, c.name)}>Delete</button>
                   </td>
                 </tr>
               ))}
