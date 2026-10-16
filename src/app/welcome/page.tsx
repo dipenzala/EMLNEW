@@ -1,9 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
 
 export default function WelcomePage() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const force = params?.get('force') === '1';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [anonymous, setAnonymous] = useState<boolean | null>(null);
@@ -12,8 +17,15 @@ export default function WelcomePage() {
 
   useEffect(() => {
     const sb = createSupabaseBrowser();
-    sb.auth.getUser().then(({ data }) => setAnonymous(!!(data.user as any)?.is_anonymous));
-  }, []);
+    sb.auth.getUser().then(({ data }) => {
+      const anon = !!(data.user as any)?.is_anonymous;
+      setAnonymous(anon);
+      // If already a real account, nothing to do — go straight to app.
+      if (!anon && data.user) {
+        router.replace('/dashboard');
+      }
+    });
+  }, [router]);
 
   async function saveAccount(e: React.FormEvent) {
     e.preventDefault();
@@ -23,10 +35,23 @@ export default function WelcomePage() {
       const sb = createSupabaseBrowser();
       const { error } = await sb.auth.updateUser({ email, password });
       if (error) throw error;
-      setMsg({ kind: 'ok', text: 'Account saved ✅ Check your email to confirm, then sign in normally.' });
+
+      // If Supabase has "Confirm email" OFF, the session upgrades immediately.
+      const { data: { session } } = await sb.auth.getSession();
+      if (session && !(session.user as any).is_anonymous) {
+        setMsg({ kind: 'ok', text: 'Account saved ✅ Taking you to the dashboard…' });
+        setTimeout(() => router.replace('/dashboard'), 600);
+      } else {
+        setMsg({
+          kind: 'ok',
+          text: 'Account saved ✅ Check your inbox to confirm, then sign in normally. Meanwhile your workspace is still a guest.',
+        });
+        setBusy(false);
+      }
     } catch (e) {
       setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Failed to save' });
-    } finally { setBusy(false); }
+      setBusy(false);
+    }
   }
 
   return (
@@ -39,29 +64,42 @@ export default function WelcomePage() {
           </svg>
         </div>
         <h1>Sender connected</h1>
-        <p className="welcome-sub">
-          Your email account is now available in CertWinX. Head to the dashboard to send your first campaign.
-        </p>
+
+        {force && anonymous ? (
+          <p className="welcome-sub" style={{ color: '#92400E' }}>
+            ⚠️ To open the dashboard and keep your sender, you must first <strong>save your workspace</strong> below.
+            Without it, everything is temporary.
+          </p>
+        ) : (
+          <p className="welcome-sub">
+            Your email account is now available in CertWinX. Head to the dashboard to send your first campaign.
+          </p>
+        )}
+
         <div className="welcome-actions">
-          <Link className="btn btn-primary" href="/senders">Go to Senders</Link>
-          <Link className="btn" href="/dashboard">Open Dashboard</Link>
+          {!anonymous && (
+            <>
+              <Link className="btn btn-primary" href="/senders">Go to Senders</Link>
+              <Link className="btn" href="/dashboard">Open Dashboard</Link>
+            </>
+          )}
         </div>
 
         {anonymous && (
           <div className="welcome-save">
             <div className="welcome-save-head">
               <strong>Save your workspace</strong>
-              <span className="badge badge-warn">Guest</span>
+              <span className="badge badge-warn">Required</span>
             </div>
             <p className="welcome-save-sub">
-              You&apos;re currently signed in as a guest. Add an email and password to keep your sender, campaigns, and data — otherwise everything is temporary.
+              Add an email and password to keep your sender, campaigns, and data. You&apos;ll then be able to sign in from anywhere.
             </p>
             <form onSubmit={saveAccount} className="welcome-save-form">
               <input className="input" type="email" placeholder="you@example.com" value={email}
                 onChange={(e) => setEmail(e.target.value)} disabled={busy} required />
               <input className="input" type="password" placeholder="Password (min 8 chars)" minLength={8} value={password}
                 onChange={(e) => setPassword(e.target.value)} disabled={busy} required />
-              <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save account'}</button>
+              <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save & continue'}</button>
             </form>
             {msg && <div className={`lc-msg lc-msg-${msg.kind === 'ok' ? 'ok' : 'error'}`}>{msg.text}</div>}
           </div>

@@ -23,9 +23,7 @@ export default function Sidebar() {
       <div className="brand">CertWinX</div>
       <nav className="nav">
         {items.map(([label, href]) => (
-          <Link key={href} href={href} className={path?.startsWith(href) ? 'active' : ''}>
-            {label}
-          </Link>
+          <Link key={href} href={href} className={path?.startsWith(href) ? 'active' : ''}>{label}</Link>
         ))}
       </nav>
     </aside>
