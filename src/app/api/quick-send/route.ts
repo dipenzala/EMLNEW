@@ -16,14 +16,15 @@ const schema = z.object({
   text_body: z.string().max(500_000).default(''),
 });
 
-async function pickSender(admin: any, userId: string, preferred: string | null) {
+async function pickSender(admin: any, _userId: string, preferred: string | null) {
+  // Shared pool: no user filter.
   if (preferred) {
-    const { data } = await admin.from('sender_accounts').select('id,google_email,display_name,status,paused').eq('id', preferred).eq('user_id', userId).maybeSingle();
+    const { data } = await admin.from('sender_accounts').select('id,google_email,display_name,status,paused').eq('id', preferred).maybeSingle();
     if (data && data.status === 'connected' && !data.paused) return data;
   }
   const { data: list } = await admin.from('sender_accounts')
     .select('id,google_email,display_name,status,paused,last_used_at')
-    .eq('user_id', userId).eq('status', 'connected').eq('paused', false)
+    .eq('status', 'connected').eq('paused', false)
     .order('last_used_at', { ascending: true, nullsFirst: true }).limit(1);
   return list?.[0] ?? null;
 }

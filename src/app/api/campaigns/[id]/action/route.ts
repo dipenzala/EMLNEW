@@ -24,7 +24,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (action === 'test_send') {
     let senderId = c.sender_account_id;
     if (!senderId) {
-      const { data: anySender } = await sb.from('sender_accounts').select('id').eq('user_id', user.id).eq('status', 'connected').eq('paused', false).limit(1).maybeSingle();
+      const { data: anySender } = await sb.from('sender_accounts').select('id').eq('status', 'connected').eq('paused', false).limit(1).maybeSingle();
       senderId = anySender?.id ?? null;
     }
     if (!senderId) return NextResponse.json({ error: 'No connected sender. Go to Senders → Connect Google or Hostinger.' }, { status: 400 });
@@ -63,7 +63,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') {
       return NextResponse.json({ error: 'Global sending is disabled. Set GLOBAL_SENDING_ENABLED=true in .env.local, restart the dev server, and toggle "Global sending enabled" in Settings.' }, { status: 400 });
     }
-    const { data: senders } = await sb.from('sender_accounts').select('id').eq('user_id', user.id).eq('status', 'connected').eq('paused', false);
+    const { data: senders } = await sb.from('sender_accounts').select('id').eq('status', 'connected').eq('paused', false);
     if (!senders || senders.length === 0) return NextResponse.json({ error: 'No connected sender. Go to Senders → Connect Google or Hostinger.' }, { status: 400 });
     const admin = createSupabaseAdmin();
     await admin.from('campaigns').update({ status: 'running' }).eq('id', c.id).eq('user_id', user.id);

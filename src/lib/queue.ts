@@ -17,19 +17,19 @@ async function makeUnsubscribeUrl(admin: any, userId: string, contactId: string)
   return `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/unsubscribe?token=${token}`;
 }
 
-async function pickAndReserveSender(admin: any, userId: string, preferred: string | null, cap: number): Promise<string | null> {
+async function pickAndReserveSender(admin: any, _userId: string, preferred: string | null, cap: number): Promise<string | null> {
+  // Shared pool: no user filter.
   if (preferred) {
     const { data: pref } = await admin.from('sender_accounts')
-      .select('id,status,paused').eq('id', preferred).eq('user_id', userId).maybeSingle();
+      .select('id,status,paused').eq('id', preferred).maybeSingle();
     if (pref && pref.status === 'connected' && !pref.paused) {
       const { data: ok } = await admin.rpc('reserve_sender_capacity', { p_sender: pref.id, p_cap: cap });
       if (ok) return pref.id;
     }
   }
   const { data: senders } = await admin.from('sender_accounts')
-    .select('id').eq('user_id', userId).eq('status', 'connected').eq('paused', false);
+    .select('id').eq('status', 'connected').eq('paused', false);
   if (!senders || senders.length === 0) return null;
-
   const since = new Date(Date.now() - 24 * 3600_000).toISOString();
   const usage = await Promise.all(senders.map(async (s: { id: string }) => {
     const { count } = await admin.from('send_events')
