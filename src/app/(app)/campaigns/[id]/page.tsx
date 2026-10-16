@@ -31,6 +31,17 @@ export default function CampaignDetail() {
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
 
+  // AUTO_REFRESH_PROGRESS — poll every 3s while jobs are in flight
+  useEffect(() => {
+    const t = setInterval(() => {
+      fetch(`/api/campaigns/${id}/progress`, { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => { if (j) setProgress(j); })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(t);
+  }, [id]);
+
   async function save(): Promise<boolean> {
     if (!c) return false;
     const r = await fetch(`/api/campaigns/${id}`, {

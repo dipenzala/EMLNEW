@@ -1,3 +1,4 @@
+import { waitUntil } from '@vercel/functions';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUser } from '@/lib/auth';
@@ -68,10 +69,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     await admin.from('campaigns').update({ status: 'running' }).eq('id', c.id).eq('user_id', user.id);
     const enqueued = await enqueueCampaignJobs(c.id);
     if (enqueued === 0) return NextResponse.json({ ok: true, enqueued: 0, sent: 0, failed: 0, note: 'No contacts to send. Upload a CSV first.' });
-    const batchLimit = Math.min(Number(process.env.MAX_BATCH_SIZE ?? 5), 5);
-    const processed = await processBatch(user.id, batchLimit);
-    log('campaign.send_now', { userId: user.id, campaignId: c.id, enqueued, ...processed });
-    return NextResponse.json({ ok: true, enqueued, ...processed });
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const secret = process.env.CRON_SECRET;
+    if (appUrl && secret) {
+      waitUntil(
+        fetch(`${appUrl}/api/drain`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
+          body: JSON.stringify({ userId: user.id, depth: 0 }),
+        }).catch(() => {}),
+      );
+    }
+    log('campaign.send_now.enqueued', { userId: user.id, campaignId: c.id, enqueued });
+    return NextResponse.json({ ok: true, enqueued, note: 'Sending in background — refresh to see progress' });
   }
 
   if (action === 'duplicate') {
