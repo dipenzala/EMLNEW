@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/Toast';
+import SpamCheckModal from '@/components/SpamCheckModal';
+import { checkSpam, type SpamReport } from '@/lib/spam';
 
 type Sender = { id: string; provider?: string; google_email: string; display_name: string | null; status: string; paused: boolean };
 const DRAFT_KEY = 'certwinx.quick_send.draft';
@@ -14,12 +16,11 @@ export default function QuickSendPage() {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ sent: number; failed: number; from: string } | null>(null);
+  const [report, setReport] = useState<SpamReport | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const { push } = useToast();
 
-  useEffect(() => {
-    fetch('/api/senders', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : [])).then(setSenders);
-  }, []);
-
+  useEffect(() => { fetch('/api/senders', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : [])).then(setSenders); }, []);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
@@ -33,23 +34,25 @@ export default function QuickSendPage() {
       }
     } catch {}
   }, []);
-
   useEffect(() => {
-    const t = setTimeout(() => {
-      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ to, senderId, subject, html, text })); } catch {}
-    }, 400);
+    const t = setTimeout(() => { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ to, senderId, subject, html, text })); } catch {} }, 400);
     return () => clearTimeout(t);
   }, [to, senderId, subject, html, text]);
 
   const connected = senders.filter((s) => s.status === 'connected' && !s.paused);
 
-  async function send() {
+  function openSpamCheck() {
     if (!to.trim()) { push('Add at least one recipient'); return; }
     if (!subject.trim()) { push('Subject is required'); return; }
     if (!html.trim()) { push('Message body is empty'); return; }
     if (connected.length === 0) { push('No connected sender. Go to Senders page.'); return; }
-    if (!confirm(`Send this email to:\n${to}\n\nProceed?`)) return;
+    const r = checkSpam({ subject, html, text, hasUnsubscribe: false });
+    setReport(r);
+    setModalOpen(true);
+  }
 
+  async function reallySend() {
+    setModalOpen(false);
     setBusy(true); setResult(null);
     try {
       const r = await fetch('/api/quick-send', {
@@ -59,7 +62,7 @@ export default function QuickSendPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || 'send failed');
       setResult({ sent: j.sent, failed: j.failed, from: j.from });
-      push(`Sent ${j.sent}, failed ${j.failed} (from ${j.from})`);
+      push(`Sent ${j.sent}, failed ${j.failed}`);
     } catch (e) { push(e instanceof Error ? e.message : 'send failed'); }
     finally { setBusy(false); }
   }
@@ -69,7 +72,6 @@ export default function QuickSendPage() {
     setTo(''); setSubject(''); setHtml('<p>Hi,</p>\n\n<p>Write your message here.</p>'); setText('');
     localStorage.removeItem(DRAFT_KEY);
   }
-
   function insertToken(token: string) { setHtml((h) => h + token); }
 
   return (
@@ -78,7 +80,7 @@ export default function QuickSendPage() {
         <h1>Quick Send</h1>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn" onClick={clearDraft} disabled={busy}>Clear</button>
-          <button className="btn btn-primary" onClick={send} disabled={busy || connected.length === 0}>
+          <button className="btn btn-primary" onClick={openSpamCheck} disabled={busy || connected.length === 0}>
             {busy ? 'Sending…' : '📤 Send now'}
           </button>
         </div>
@@ -91,33 +93,28 @@ export default function QuickSendPage() {
       )}
       {result && (
         <div className="card" style={{ marginBottom: 16, background: '#DCFCE7', borderColor: '#86EFAC' }}>
-          ✅ Sent <strong>{result.sent}</strong> from <strong>{result.from}</strong>
-          {result.failed > 0 && <>, ❌ failed <strong>{result.failed}</strong></>}
+          ✅ Sent <strong>{result.sent}</strong>{result.failed > 0 && <>, ❌ failed <strong>{result.failed}</strong></>}
         </div>
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="grid-2">
-          <div className="field">
-            <label>To (comma-separated for multiple)</label>
+          <div className="field"><label>To (comma-separated for multiple)</label>
             <input className="input" placeholder="john@example.com, jane@example.com" value={to} onChange={(e) => setTo(e.target.value)} disabled={busy} />
-            <small>Max 50 recipients per send.</small>
+            <small>Max 50 recipients per send. From name will be <strong>Startup India Certificate</strong>.</small>
           </div>
-          <div className="field">
-            <label>From sender</label>
+          <div className="field"><label>From sender</label>
             <select className="select" value={senderId} onChange={(e) => setSenderId(e.target.value)} disabled={busy}>
               <option value="">🔄 Auto (least recently used connected sender)</option>
               {senders.map((s) => (
                 <option key={s.id} value={s.id}>
-                  [{s.provider === 'hostinger' ? 'Hostinger' : 'Gmail'}] {s.google_email}
-                  {s.paused ? ' (paused)' : ''}{s.status !== 'connected' ? ' [' + s.status + ']' : ''}
+                  [{s.provider === 'hostinger' ? 'Hostinger' : 'Gmail'}] {s.google_email}{s.paused ? ' (paused)' : ''}{s.status !== 'connected' ? ' [' + s.status + ']' : ''}
                 </option>
               ))}
             </select>
           </div>
         </div>
-        <div className="field">
-          <label>Subject</label>
+        <div className="field"><label>Subject</label>
           <input className="input" placeholder="Your subject line" value={subject} onChange={(e) => setSubject(e.target.value)} disabled={busy} />
         </div>
       </div>
@@ -136,7 +133,7 @@ export default function QuickSendPage() {
         </div>
         <div className="card">
           <p className="card-title">Live preview</p>
-          <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: 12, background: '#FFF', minHeight: 320, overflow: 'auto', maxHeight: 480 }}
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, background: '#FFF', minHeight: 320, overflow: 'auto', maxHeight: 480 }}
                dangerouslySetInnerHTML={{ __html: html || '<em style="color:#94A3B8">Nothing yet.</em>' }} />
         </div>
       </div>
@@ -148,10 +145,19 @@ export default function QuickSendPage() {
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 40 }}>
         <button className="btn" onClick={clearDraft} disabled={busy}>Clear draft</button>
-        <button className="btn btn-primary" onClick={send} disabled={busy || connected.length === 0}>
+        <button className="btn btn-primary" onClick={openSpamCheck} disabled={busy || connected.length === 0}>
           {busy ? 'Sending…' : '📤 Send now'}
         </button>
       </div>
+
+      <SpamCheckModal
+        open={modalOpen}
+        report={report}
+        busy={busy}
+        onCancel={() => setModalOpen(false)}
+        onConfirm={reallySend}
+        actionLabel="Send anyway"
+      />
     </>
   );
 }

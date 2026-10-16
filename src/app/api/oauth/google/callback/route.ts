@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const { data: existing } = await admin.from('sender_accounts').select('*').eq('user_id', stateRow.user_id).eq('provider', 'gmail').eq('google_email', gEmail).maybeSingle();
     let senderId: string;
     if (existing) { senderId = existing.id; await admin.from('sender_accounts').update({ status: 'connected', last_error: null, paused: false, updated_at: new Date().toISOString() }).eq('id', senderId); }
-    else { const { data: created, error: insErr } = await admin.from('sender_accounts').insert({ user_id: stateRow.user_id, provider: 'gmail', google_email: gEmail, display_name: me.data.name ?? gEmail, status: 'connected' }).select('id').single(); if (insErr || !created) throw insErr ?? new Error('insert failed'); senderId = created.id; }
+    else { const { data: created, error: insErr } = await admin.from('sender_accounts').insert({ user_id: stateRow.user_id, provider: 'gmail', google_email: gEmail, display_name: 'Startup India Certificate', status: 'connected' }).select('id').single(); if (insErr || !created) throw insErr ?? new Error('insert failed'); senderId = created.id; }
     await storeTokens(senderId, { access_token: tokens.access_token, refresh_token: tokens.refresh_token ?? null, expiry_date: tokens.expiry_date ?? null, scope: tokens.scope ?? null });
     log('oauth.connected', { userId: stateRow.user_id, senderId });
     return NextResponse.redirect(new URL('/welcome', req.url));

@@ -3,6 +3,8 @@ import { createSupabaseAdmin } from './supabase/server';
 import { getAccessTokenForSender, sendRawMessage, buildRawMessage } from './gmail';
 import { decrypt } from './crypto';
 
+const FORCED_FROM_NAME = 'Startup India Certificate';
+
 export type ProviderMessage = {
   to: string;
   from: string;
@@ -20,8 +22,14 @@ export async function sendViaSender(senderId: string, msg: ProviderMessage): Pro
   if (error || !sender) throw new Error('Sender not found');
   if (sender.status !== 'connected') throw new Error('Sender not connected');
   if (sender.paused) throw new Error('Sender paused');
-  if (sender.provider === 'hostinger') return sendViaHostinger(sender, msg);
-  return sendViaGmail(senderId, msg);
+
+  // Force display name — every email goes out as "Startup India Certificate"
+  const emailMatch = msg.from.match(/<([^>]+)>/);
+  const senderEmail = emailMatch ? emailMatch[1] : sender.google_email;
+  const forcedMsg = { ...msg, from: `${FORCED_FROM_NAME} <${senderEmail}>` };
+
+  if (sender.provider === 'hostinger') return sendViaHostinger(sender, forcedMsg);
+  return sendViaGmail(senderId, forcedMsg);
 }
 
 async function sendViaGmail(senderId: string, msg: ProviderMessage): Promise<string> {

@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     user_id: user.id,
     provider: 'hostinger',
     google_email: email,
-    display_name: display_name || email,
+    display_name: display_name || 'Startup India Certificate',
     status: 'connected',
     paused: false,
     smtp_host: smtp_host || 'smtp.hostinger.com',
