@@ -1,10 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
 
-export default function WelcomePage() {
+function WelcomeInner() {
   const router = useRouter();
   const params = useSearchParams();
   const force = params?.get('force') === '1';
@@ -20,7 +20,6 @@ export default function WelcomePage() {
     sb.auth.getUser().then(({ data }) => {
       const anon = !!(data.user as any)?.is_anonymous;
       setAnonymous(anon);
-      // If already a real account, nothing to do — go straight to app.
       if (!anon && data.user) {
         router.replace('/dashboard');
       }
@@ -36,7 +35,6 @@ export default function WelcomePage() {
       const { error } = await sb.auth.updateUser({ email, password });
       if (error) throw error;
 
-      // If Supabase has "Confirm email" OFF, the session upgrades immediately.
       const { data: { session } } = await sb.auth.getSession();
       if (session && !(session.user as any).is_anonymous) {
         setMsg({ kind: 'ok', text: 'Account saved ✅ Taking you to the dashboard…' });
@@ -106,5 +104,19 @@ export default function WelcomePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function WelcomePage() {
+  return (
+    <Suspense fallback={
+      <div className="welcome-shell">
+        <div className="welcome-card">
+          <div className="skeleton" style={{ height: 200 }} />
+        </div>
+      </div>
+    }>
+      <WelcomeInner />
+    </Suspense>
   );
 }
