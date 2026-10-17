@@ -1,4 +1,3 @@
-/* eslint-disable react/no-unescaped-entities, react-hooks/exhaustive-deps */
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
