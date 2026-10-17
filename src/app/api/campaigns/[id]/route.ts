@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const user = await requireUser();
   const parsed = campaignInput.partial().safeParse(await req.json().catch(() => ({})));
-  if (!parsed.success) return NextResponse.json({ error: 'invalid input', issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: 'invalid input' }, { status: 400 });
   const patch: Record<string, unknown> = { ...parsed.data };
   if (typeof patch.html === 'string') patch.html = sanitizeUserHtml(patch.html as string);
   const sb = createSupabaseServer();
