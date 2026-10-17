@@ -1,555 +1,346 @@
-#!/usr/bin/env bash
-# CertWinX: OPAL-style Editorial Dark Landing Page
-set -euo pipefail
+cd ~/OneDrive/Desktop/EMLH/certwinx
 
-say() { printf "\033[1;34m[CertWinX]\033[0m %s\n" "$*"; }
-die() { printf "\033[1;31m[error]\033[0m %s\n" "$*" >&2; exit 1; }
+# 1. Install xlsx (Excel support ke liye)
+npm install xlsx
 
-[ -f "package.json" ] || die "Run from project root."
-
-write() { local p="$1"; mkdir -p "$(dirname "$p")"; cat > "$p"; say "wrote $p"; }
-backup() { local f="$1"; [ -f "$f" ] && cp "$f" "$f.bak.$(date +%s)"; }
-
-# Ensure framer-motion is installed
-say "Installing framer-motion (if not present)..."
-npm install framer-motion --silent
-
-# =============================================================
-# 1. Update Layout to include Serif Font
-# =============================================================
-backup "src/app/layout.tsx"
-write "src/app/layout.tsx" <<'EOF'
-import './globals.css';
-import type { Metadata, Viewport } from 'next';
-import { Inter, Playfair_Display } from 'next/font/google';
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
-const playfair = Playfair_Display({ subsets: ['latin'], variable: '--font-playfair', display: 'swap' });
-
-export const metadata: Metadata = {
-  title: 'CertWinX — Email Campaign Automation',
-  description: 'Self-hosted email campaign automation for Gmail and Hostinger.',
-};
-
-export const viewport: Viewport = {
-  themeColor: '#050505',
-  width: 'device-width',
-  initialScale: 1,
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
-      <body>{children}</body>
-    </html>
-  );
-}
-EOF
-
-# =============================================================
-# 2. Append OPAL Editorial CSS
-# =============================================================
-MARK="/* OPAL Editorial Landing v1 */"
-if ! grep -qF "$MARK" "src/app/globals.css" 2>/dev/null; then
-  cat >> "src/app/globals.css" <<'EOF'
-
-/* OPAL Editorial Landing v1 */
-:root {
-  --bg-black: #050505;
-  --text-white: #FAFAFA;
-  --text-muted: #888888;
-  --accent-blue: #7DA9CC; /* Pale desaturated blue */
-  --accent-mid: #4A77A8;
-  --hero-pin-distance: 400vh;
-  --line-color: rgba(255, 255, 255, 0.1);
-}
-
-.opal-body {
-  background-color: var(--bg-black);
-  color: var(--text-white);
-  font-family: var(--font-inter), sans-serif;
-  overflow-x: hidden;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Scanline Texture */
-.scanlines {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0.15),
-    rgba(0, 0, 0, 0.15) 1px,
-    transparent 1px,
-    transparent 2px
-  );
-  opacity: 0.4;
-}
-
-/* Typography */
-.opal-serif {
-  font-family: var(--font-playfair), serif;
-  font-weight: 300;
-  letter-spacing: -0.02em;
-  line-height: 0.95;
-}
-
-.opal-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  font-weight: 500;
-}
-
-/* Nav */
-.opal-nav {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 40px;
-  z-index: 100;
-  background: rgba(5, 5, 5, 0.8);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--line-color);
-  transform: translateY(-100%);
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.opal-nav.visible {
-  transform: translateY(0);
-}
-.opal-nav .center-link {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  color: var(--text-white);
-  text-decoration: none;
-}
-.opal-nav .btn {
-  border: none;
-  border-radius: 2px;
-  padding: 10px 24px;
-  background: var(--text-white);
-  color: var(--bg-black);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  transition: all 0.3s ease;
-}
-.opal-nav .btn:hover {
-  background: var(--accent-blue);
-}
-
-/* Hero Scroll Section */
-.opal-hero-container {
-  height: var(--hero-pin-distance);
-  position: relative;
-}
-.opal-hero-sticky {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Media Placeholder */
-.opal-media-slot {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at center, #1a1a1a 0%, #050505 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.opal-media-slot::before {
-  content: 'MEDIA SLOT';
-  color: rgba(255,255,255,0.05);
-  font-size: 10vw;
-  font-family: var(--font-inter);
-  font-weight: 800;
-}
-
-/* Scrims */
-.opal-vignette {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.6) 100%);
-}
-.opal-scrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, #050505 0%, transparent 60%);
-}
-
-/* Hero UI */
-.hero-label-tl { position: absolute; top: 40px; left: 40px; color: var(--text-white); z-index: 10; }
-.hero-label-tr { position: absolute; top: 40px; right: 40px; color: var(--accent-blue); text-align: right; z-index: 10; }
-.hero-counter { position: absolute; bottom: 40px; right: 40px; font-size: 14px; font-weight: 500; z-index: 10; letter-spacing: 0.1em; }
-
-/* Screens */
-.hero-screen {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 10vw;
-  z-index: 5;
-  pointer-events: none;
-}
-.hero-screen.left { justify-content: flex-start; }
-.hero-screen.right { justify-content: flex-end; }
-
-.caption-block {
-  max-width: 500px;
-  pointer-events: auto;
-}
-.caption-eyebrow {
-  color: var(--accent-blue);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  margin-bottom: 20px;
-}
-.caption-lede {
-  font-size: 20px;
-  color: var(--text-muted);
-  margin-bottom: 10px;
-  font-family: var(--font-inter);
-}
-.caption-headline {
-  font-family: var(--font-playfair);
-  font-size: clamp(48px, 6vw, 80px);
-  font-weight: 300;
-  line-height: 1;
-  margin-bottom: 30px;
-  color: var(--text-white);
-}
-
-/* Buttons */
-.btn-primary, .btn-secondary {
-  display: inline-block;
-  padding: 16px 32px;
-  border-radius: 2px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  text-decoration: none;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-.btn-primary {
-  background: var(--text-white);
-  color: var(--bg-black);
-  border: 1px solid var(--text-white);
-  position: relative;
-  overflow: hidden;
-}
-.btn-primary::after {
-  content: '';
-  position: absolute;
-  top: 0; left: -100%;
-  width: 50%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-  transition: left 0.5s ease;
-}
-.btn-primary:hover::after { left: 100%; }
-.btn-secondary {
-  background: transparent;
-  color: var(--text-white);
-  border: 1px solid var(--line-color);
-}
-.btn-secondary:hover { border-color: var(--text-white); }
-
-/* Studio Section */
-.opal-studio {
-  padding: 15vh 10vw;
-  position: relative;
-  background: var(--bg-black);
-  border-top: 1px solid var(--line-color);
-}
-.studio-title {
-  font-family: var(--font-playfair);
-  font-size: clamp(60px, 10vw, 140px);
-  font-weight: 300;
-  text-align: right;
-  line-height: 0.9;
-  margin: 20px 0 80px 0;
-  position: relative;
-}
-.studio-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 80px;
-}
-.studio-left p {
-  font-size: 18px;
-  line-height: 1.6;
-  color: var(--text-muted);
-  max-width: 400px;
-  margin-bottom: 40px;
-}
-.studio-actions { display: flex; gap: 16px; }
-.studio-facts { display: flex; flex-direction: column; gap: 40px; }
-.fact-item { border-top: 1px solid var(--line-color); padding-top: 20px; }
-.fact-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--accent-blue); margin-bottom: 8px; display: block; }
-.fact-value { font-size: 16px; color: var(--text-white); font-family: var(--font-inter); }
-
-/* Background Glows */
-.studio-glow {
-  position: absolute;
-  width: 400px; height: 400px;
-  background: radial-gradient(circle, var(--accent-blue) 0%, transparent 70%);
-  opacity: 0.15;
-  filter: blur(80px);
-  top: 10%; right: 5%;
-  pointer-events: none;
-}
-
-/* Footer */
-.opal-footer {
-  padding: 80px 0 40px;
-  border-top: 1px solid var(--line-color);
-  overflow: hidden;
-  position: relative;
-}
-.footer-wordmark {
-  font-family: var(--font-playfair);
-  font-size: 15vw;
-  font-weight: 300;
-  line-height: 0.7;
-  text-align: center;
-  white-space: nowrap;
-  color: var(--text-white);
-  position: relative;
-  z-index: 2;
-}
-.footer-glow {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 50vw; height: 100px;
-  background: var(--accent-blue);
-  filter: blur(100px);
-  opacity: 0.2;
-  z-index: 1;
-}
-.footer-bottom {
-  display: flex;
-  justify-content: space-between;
-  padding: 40px 10vw 0;
-  margin-top: 40px;
-  border-top: 1px solid var(--line-color);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-}
-.footer-links { display: flex; gap: 20px; }
-.footer-links a { color: var(--text-white); text-decoration: none; }
-
-@media (max-width: 768px) {
-  .studio-grid { grid-template-columns: 1fr; gap: 40px; }
-  .hero-screen { padding: 0 5vw; justify-content: center !important; text-align: center; }
-  .footer-bottom { flex-direction: column; gap: 20px; align-items: center; }
-}
-EOF
-  say "appended OPAL CSS"
-fi
-
-# =============================================================
-# 3. Rewrite Landing Page with Framer Motion
-# =============================================================
-backup "src/app/page.tsx"
-write "src/app/page.tsx" <<'EOF'
-/* eslint-disable react/no-unescaped-entities */
+# 2. Update Campaign Page (Excel Upload + Preview + Remove Manage Contacts)
+cat > "src/app/(app)/campaigns/[id]/page.tsx" <<'EOF'
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { motion, useScroll, useTransform, useMotionValueEvent } from 'framer-motion';
+import { useParams } from 'next/navigation';
+import { useToast } from '@/components/Toast';
+import SpamCheckModal from '@/components/SpamCheckModal';
+import { checkSpam, type SpamReport } from '@/lib/spam';
+import * as XLSX from 'xlsx';
 
-export default function LandingPage() {
-  const heroRef = useRef<HTMLDivElement>(null);
-  const [navVisible, setNavVisible] = useState(false);
+type Campaign = { id: string; name: string; subject: string; html: string; text_body: string; status: string; sender_account_id: string | null; scheduled_at: string | null; segment_tags: string[]; };
+type Sender = { id: string; provider?: string; google_email: string; status: string; paused: boolean };
+
+export default function CampaignDetail() {
+  const { id } = useParams<{ id: string }>();
+  const [c, setC] = useState<Campaign | null>(null);
+  const [senders, setSenders] = useState<Sender[]>([]);
+  const [progress, setProgress] = useState<Record<string, number> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [contactCount, setContactCount] = useState<number | null>(null);
   
-  // Track scroll for the hero pin
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ["start start", "end end"]
-  });
+  const [report, setReport] = useState<SpamReport | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  
+  // File Import States
+  const [importData, setImportData] = useState<any[] | null>(null);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [mapEmail, setMapEmail] = useState('');
+  const [mapName, setMapName] = useState('');
+  const [mappingBusy, setMappingBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { push } = useToast();
 
-  // Hide/show nav based on scroll
-  const { scrollY } = useScroll();
-  useMotionValueEvent(scrollY, "change", (latest) => {
-    setNavVisible(latest > 100);
-  });
+  async function load() {
+    const [cr, sr, pr, cc] = await Promise.all([
+      fetch(`/api/campaigns/${id}`, { cache: 'no-store' }),
+      fetch('/api/senders', { cache: 'no-store' }),
+      fetch(`/api/campaigns/${id}/progress`, { cache: 'no-store' }),
+      fetch(`/api/contacts?campaign_id=${id}&count=1`, { cache: 'no-store' }),
+    ]);
+    if (cr.ok) setC(await cr.json());
+    if (sr.ok) setSenders(await sr.json());
+    if (pr.ok) setProgress(await pr.json());
+    if (cc.ok) { const j = await cc.json().catch(() => null); if (j && typeof j.count === 'number') setContactCount(j.count); }
+  }
 
-  // Media scale (scales down slightly as you scroll)
-  const mediaScale = useTransform(scrollYProgress, [0, 1], [1, 0.92]);
+  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    const t = setInterval(() => { fetch(`/api/campaigns/${id}/progress`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => { if (j) setProgress(j); }).catch(() => {}); }, 3000);
+    return () => clearInterval(t);
+  }, [id]);
 
-  // Caption Opacities mapping
-  // Screen 1: visible 0.0 - 0.33, fades out at 0.33
-  const opacity1 = useTransform(scrollYProgress, [0, 0.05, 0.3, 0.35], [1, 1, 1, 0]);
-  const y1 = useTransform(scrollYProgress, [0, 0.35], [0, -50]);
+  async function save(): Promise<boolean> {
+    if (!c) return false;
+    const r = await fetch(`/api/campaigns/${id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: c.name, subject: c.subject, html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id, segment_tags: c.segment_tags, scheduled_at: c.scheduled_at }),
+    });
+    return r.ok;
+  }
 
-  // Screen 2: fades in at 0.33, visible till 0.66
-  const opacity2 = useTransform(scrollYProgress, [0.3, 0.35, 0.6, 0.65], [0, 1, 1, 0]);
-  const y2 = useTransform(scrollYProgress, [0.3, 0.65], [50, -50]);
+  async function saveOnly() { setBusy(true); const ok = await save(); setBusy(false); push(ok ? 'Saved ✅' : 'Save failed'); }
 
-  // Screen 3: fades in at 0.66, visible till 1.0
-  const opacity3 = useTransform(scrollYProgress, [0.6, 0.65, 0.95, 1], [0, 1, 1, 0]);
-  const y3 = useTransform(scrollYProgress, [0.6, 1], [50, -50]);
+  async function runAction(a: string) {
+    if (!c) return;
+    setBusy(true);
+    const saved = await save();
+    if (!saved) { setBusy(false); push('Could not save campaign'); return; }
+    const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: a }) });
+    const j = await r.json().catch(() => ({}));
+    setBusy(false);
+    if (r.ok) {
+      if (a === 'send_now') push((j.enqueued ?? 0) === 0 ? 'No contacts. Add contacts first.' : `⚡ Enqueued ${j.enqueued}. Sending in background…`);
+      else if (a === 'test_send') push('Test email sent ✅');
+      else push(`${a} ok`);
+      load();
+    } else push(j.error || `${a} failed`);
+  }
 
-  // Counter text
-  const [counter, setCounter] = useState('01');
-  useMotionValueEvent(scrollYProgress, "change", (latest) => {
-    if (latest < 0.33) setCounter('01');
-    else if (latest < 0.66) setCounter('02');
-    else setCounter('03');
-  });
+  function requestAction(a: string) {
+    if (!c) return;
+    if (a === 'send_now' || a === 'test_send') {
+      const r = checkSpam({ subject: c.subject, html: c.html, text: c.text_body, hasUnsubscribe: a === 'send_now' });
+      setReport(r); setPendingAction(a); setModalOpen(true);
+    } else { runAction(a); }
+  }
 
-  // Fade up for studio section
-  const studioRef = useRef<HTMLDivElement>(null);
-  const studioScroll = useScroll({ target: studioRef, offset: ["start end", "center center"] });
-  const studioOpacity = useTransform(studioScroll.scrollYProgress, [0, 1], [0, 1]);
-  const studioY = useTransform(studioScroll.scrollYProgress, [0, 1], [100, 0]);
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        
+        if (data.length === 0) throw new Error('File is empty');
+        setHeaders(Object.keys(data[0] as object));
+        setImportData(data);
+        
+        const keys = Object.keys(data[0] as object);
+        const eCol = keys.find(k => k.toLowerCase().includes('email'));
+        const nCol = keys.find(k => k.toLowerCase().includes('name'));
+        if (eCol) setMapEmail(eCol);
+        if (nCol) setMapName(nCol);
+        
+      } catch (err) { push('Invalid file format. Please upload CSV or Excel.'); }
+      if (fileRef.current) fileRef.current.value = '';
+    };
+    reader.readAsBinaryString(file);
+  }
+
+  async function submitMappedData() {
+    if (!importData || !mapEmail) { push('Please select an Email column'); return; }
+    setMappingBusy(true);
+    
+    const mapped = importData.map(row => ({
+      email: String(row[mapEmail] || '').trim(),
+      first_name: mapName ? String(row[mapName] || '').trim() : undefined,
+    })).filter(x => x.email && x.email.includes('@'));
+    
+    const r = await fetch(`/api/campaigns/${id}/contacts`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ contacts: mapped })
+    });
+    const j = await r.json();
+    
+    if (r.ok) {
+      push(`Imported ${j.inserted} contacts`);
+      if (mapName && c && !c.subject.includes('{{first_name}}')) {
+        const newSub = c.subject ? `${c.subject} - {{first_name}}` : 'Congratulations - {{first_name}}';
+        setC({ ...c, subject: newSub });
+        push('Subject updated with {{first_name}} token');
+      }
+      setImportData(null); setMapEmail(''); setMapName(''); load();
+    } else {
+      push(j.error || 'Import failed');
+    }
+    setMappingBusy(false);
+  }
+
+  if (!c) return <div className="skeleton" style={{ height: 240 }} />;
+
+  const connectedSenders = senders.filter((s) => s.status === 'connected' && !s.paused);
+  const hasSender = connectedSenders.length > 0;
+  const hasContacts = (contactCount ?? 0) > 0;
 
   return (
-    <div className="opal-body">
-      <div className="scanlines" />
-
-      {/* NAV */}
-      <nav className={`opal-nav ${navVisible ? 'visible' : ''}`} aria-hidden={!navVisible}>
-        <div className="opal-label" style={{ fontSize: 16, letterSpacing: '0.2em', fontWeight: 600 }}>
-          <Link href="/" style={{ color: 'inherit', textDecoration: 'none' }}>CERTWINX</Link>
-        </div>
-        <a href="#studio" className="center-link opal-label">Studio</a>
-        <Link href="/signup" className="btn">Sign Up</Link>
-      </nav>
-
-      {/* HERO */}
-      <div className="opal-hero-container" ref={heroRef}>
-        <div className="opal-hero-sticky">
-          
-          {/* Media Placeholder */}
-          <motion.div className="opal-media-slot" style={{ scale: mediaScale }} />
-
-          {/* Scrims */}
-          <div className="opal-vignette" />
-          <div className="opal-scrim" />
-
-          {/* Labels */}
-          <div className="hero-label-tl opal-label">
-            CERTWINX / Email Automation
-          </div>
-          <div className="hero-label-tr opal-label">
-            Global / Est. 2024
-          </div>
-          <div className="hero-counter">
-            {counter} / 03
-          </div>
-
-          {/* SCREEN 1 */}
-          <motion.div className="hero-screen left" style={{ opacity: opacity1, y: y1 }}>
-            <div className="caption-block">
-              <div className="caption-eyebrow">Campaigns, engineered before they are sent</div>
-              <div className="caption-lede">Anyone can send a bulk email.</div>
-              <h1 className="caption-headline">Want more?</h1>
-              <div style={{ display: 'flex', gap: 16 }}>
-                <Link href="/signup" className="btn-primary">Start sending</Link>
-                <a href="#studio" className="btn-secondary">See features</a>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* SCREEN 2 */}
-          <motion.div className="hero-screen right" style={{ opacity: opacity2, y: y2 }}>
-            <div className="caption-block">
-              <div className="caption-lede">Every campaign leaves as a one-off.</div>
-              <h1 className="caption-headline">Unique delivery</h1>
-            </div>
-          </motion.div>
-
-          {/* SCREEN 3 */}
-          <motion.div className="hero-screen left" style={{ opacity: opacity3, y: y3 }}>
-            <div className="caption-block">
-              <div className="caption-lede">Two clicks. One dashboard. Unlimited scale.</div>
-              <h1 className="caption-headline">Unique you</h1>
-            </div>
-          </motion.div>
-
+    <>
+      <div className="topbar">
+        <h1>{c.name}</h1>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="btn" onClick={saveOnly} disabled={busy}>Save</button>
+          <button className="btn" onClick={() => requestAction('test_send')} disabled={busy || !hasSender}>Test Send</button>
+          <button className="btn btn-primary" onClick={() => requestAction('send_now')} disabled={busy || !hasSender || !hasContacts}>
+            {busy ? 'Working…' : '⚡ Send Now'}
+          </button>
+          <a className="btn btn-ghost" href={`/api/campaigns/${id}/report`} download>⬇️ Report</a>
         </div>
       </div>
 
-      {/* STUDIO SECTION */}
-      <section className="opal-studio" id="studio" ref={studioRef}>
-        <div className="studio-glow" />
-        
-        <motion.div style={{ opacity: studioOpacity, y: studioY }}>
-          <div className="opal-label" style={{ color: 'var(--accent-blue)' }}>The engine</div>
-          
-          <h2 className="studio-title">
-            Get your unique<br />experience
-          </h2>
-
-          <div className="studio-grid">
-            <div className="studio-left">
-              <p>
-                Send a campaign and watch it land, or sit down with nothing and we design it in front of you. 
-                OAuth and SMTP are agreed before a mail is opened. Shape, length, and finish are decided before a single byte is sent.
-              </p>
-              <div className="studio-actions">
-                <Link href="/signup" className="btn-primary">Start a campaign</Link>
-                <Link href="/contact" className="btn-secondary">Contact us</Link>
-              </div>
-            </div>
-
-            <div className="studio-facts">
-              <div className="fact-item">
-                <span className="fact-label">Protocol</span>
-                <div className="fact-value">AES-256 Encrypted</div>
-              </div>
-              <div className="fact-item">
-                <span className="fact-label">Scale</span>
-                <div className="fact-value">Up to 3,000 emails per day</div>
-              </div>
-            </div>
+      <div className="grid-2" style={{ marginBottom: 20 }}>
+        <div className="card">
+          <p className="card-title">Compose</p>
+          <div className="field"><label>Subject</label><input className="input" value={c.subject} onChange={(e) => setC({ ...c, subject: e.target.value })} /></div>
+          <div className="field"><label>Sender</label>
+            <select className="select" value={c.sender_account_id ?? ''} onChange={(e) => setC({ ...c, sender_account_id: e.target.value || null })}>
+              <option value="">🔄 Auto (round-robin — {connectedSenders.length} active)</option>
+              {senders.map((s) => (<option key={s.id} value={s.id}>[{s.provider === 'hostinger' ? 'Hostinger' : 'Gmail'}] {s.google_email}</option>))}
+            </select>
           </div>
-        </motion.div>
-      </section>
-
-      {/* FOOTER */}
-      <footer className="opal-footer">
-        <div className="footer-glow" />
-        <div className="footer-wordmark">CERTWINX</div>
-        
-        <div className="footer-bottom">
-          <div className="footer-links">
-            <a href="#">Instagram</a>
-            <a href="#">Twitter</a>
-          </div>
-          <div>Global, 2026</div>
+          <div className="field"><label>HTML body (use {'{{first_name}}'})</label>
+            <textarea className="textarea" rows={10} value={c.html} onChange={(e) => setC({ ...c, html: e.target.value })} /></div>
         </div>
-      </footer>
 
-    </div>
+        <div>
+          <div className="card" style={{ marginBottom: 20 }}>
+            <p className="card-title">Contacts ({contactCount || 0})</p>
+            
+            {!importData ? (
+              <div style={{ padding: 20, background: '#F8FAFC', borderRadius: 8, textAlign: 'center', border: '1px dashed #CBD5E1' }}>
+                <p style={{ fontSize: 13, marginBottom: 12, color: '#64748B' }}>Upload CSV or Excel (.xlsx, .xls)</p>
+                <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>📁 Select File</button>
+                <input ref={fileRef} type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} onChange={handleFile} />
+              </div>
+            ) : (
+              <div style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <strong style={{ fontSize: 13 }}>Preview File Data ({importData.length} rows)</strong>
+                  <button className="btn btn-sm" onClick={() => setImportData(null)}>Cancel</button>
+                </div>
+                
+                <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+                  <table className="table" style={{ fontSize: 12, minWidth: 300 }}>
+                    <thead>
+                      <tr>{headers.slice(0, 3).map(h => <th key={h}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {importData.slice(0, 3).map((row, i) => (
+                        <tr key={i}>{headers.slice(0, 3).map(h => <td key={h}>{String(row[h]).substring(0, 20)}</td>)}</tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="grid-2" style={{ marginBottom: 12 }}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: 12 }}>Email Column (Required)</label>
+                    <select className="select" value={mapEmail} onChange={e => setMapEmail(e.target.value)}>
+                      <option value="">Select...</option>
+                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: 12 }}>Name Column (Optional)</label>
+                    <select className="select" value={mapName} onChange={e => setMapName(e.target.value)}>
+                      <option value="">Skip</option>
+                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                </div>
+                
+                <button className="btn btn-primary" style={{ width: '100%' }} onClick={submitMappedData} disabled={mappingBusy}>
+                  {mappingBusy ? 'Importing...' : `Import ${importData.length} Contacts`}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <SpamCheckModal open={modalOpen} report={report} busy={busy} onCancel={() => setModalOpen(false)} onConfirm={() => { if (pendingAction) runAction(pendingAction); setModalOpen(false); }} />
+    </>
   );
 }
 EOF
 
-say ""
-say "✅ OPAL-style Editorial Landing Page applied."
-say ""
-say "Note: This completely replaces your old light-theme landing page."
-say ""
-say "Run:"
-say "  npm run build"
-say "  git add . && git commit -m 'feat: dark editorial scroll-driven landing page' && git push"
+# 3. Add Terminal CSS for Dashboard
+MARK="/* CertWinX terminal box */"
+if ! grep -qF "$MARK" "src/app/globals.css" 2>/dev/null; then
+  cat >> "src/app/globals.css" <<'EOF'
+
+/* CertWinX terminal box */
+.terminal-box {
+  background: #0a0a0a;
+  color: #00ff00;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  padding: 16px;
+  border-radius: 8px;
+  height: 300px;
+  overflow-y: auto;
+  border: 1px solid #333;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
+  line-height: 1.6;
+}
+.term-green { color: #00ff00; }
+.term-time { color: #888; }
+.term-sender { color: #00bfff; }
+.term-err { color: #ff4444; }
+EOF
+fi
+
+# 4. Update Dashboard Page (Terminal View)
+cat > "src/app/(app)/dashboard/page.tsx" <<'EOF'
+/* eslint-disable react-hooks/exhaustive-deps */
+'use client';
+import { useEffect, useState } from 'react';
+
+type Metrics = { campaigns: number; queued: number; sent: number; failed: number; uncertain: number; suppressed: number; unsubscribed: number; senders: number; senders_connected: number; cap_used: number; cap_total: number; global_enabled: boolean; };
+type History = { id: string; to_email: string; status: string; accepted_at: string | null; created_at: string; sender_accounts: { google_email: string } };
+
+export default function DashboardPage() {
+  const [m, setM] = useState<Metrics | null>(null);
+  const [history, setHistory] = useState<History[] | null>(null);
+
+  async function load() {
+    try {
+      const [r1, r2] = await Promise.all([
+        fetch('/api/dashboard', { cache: 'no-store' }),
+        fetch('/api/activity', { cache: 'no-store' }),
+      ]);
+      if (r1.ok) setM(await r1.json());
+      if (r2.ok) setHistory(await r2.json());
+    } catch (e) {}
+  }
+
+  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, []);
+
+  if (!m) return <div className="skeleton" style={{ height: 90 }} />;
+
+  return (
+    <>
+      <div className="topbar"><h1>Overview</h1></div>
+      <div className="grid-4" style={{ marginBottom: 24 }}>
+        {[['Campaigns', m.campaigns],['Queued', m.queued],['Accepted', m.sent],['Failed', m.failed]].map(([k, v]) => (
+          <div className="card" key={k as string}><p className="card-title">{k}</p><div className="metric">{v as number}</div></div>
+        ))}
+      </div>
+
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16 }}>Live Send Logs</h2>
+            <p style={{ margin: '4px 0 0', color: '#64748B', fontSize: 13 }}>Terminal view. Updates automatically.</p>
+          </div>
+          <span className="badge badge-ok">Live</span>
+        </div>
+        
+        <div className="terminal-box">
+          {!history ? (
+            <div>Connecting to log stream...</div>
+          ) : history.length === 0 ? (
+            <div>No emails sent yet. Waiting for activity...</div>
+          ) : (
+            history.map((h) => {
+              const time = new Date(h.accepted_at || h.created_at).toLocaleTimeString();
+              const status = h.status.toUpperCase();
+              const isErr = h.status === 'failed' || h.status === 'uncertain';
+              return (
+                <div key={h.id} style={{ marginBottom: 4 }}>
+                  <span className="term-time">[{time}]</span>{' '}
+                  <span className="term-sender">FROM: {h.sender_accounts?.google_email || 'unknown'}</span>{' '}
+                  <span className="term-green">-&gt; TO: {h.to_email}</span>{' '}
+                  <span className={isErr ? 'term-err' : 'term-green'}>[{status}]</span>
+                </div>
+              );
+            })
+          )}
+          <div style={{ marginTop: 10 }}>_</div>
+        </div>
+      </div>
+    </>
+  );
+}
+EOF
