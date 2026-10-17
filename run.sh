@@ -1,167 +1,51 @@
 #!/usr/bin/env bash
+# CertWinX: Terminal Dashboard + Excel/CSV Upload with Preview
 set -euo pipefail
-[ -f "package.json" ] || { echo "Run from project root."; exit 1; }
 
 say() { printf "\033[1;34m[CertWinX]\033[0m %s\n" "$*"; }
+die() { printf "\033[1;31m[error]\033[0m %s\n" "$*" >&2; exit 1; }
+
+[ -f "package.json" ] || die "Run from project root."
+
+write() { local p="$1"; mkdir -p "$(dirname "$p")"; cat > "$p"; say "wrote $p"; }
 backup() { local f="$1"; [ -f "$f" ] && cp "$f" "$f.bak.$(date +%s)"; }
 
-# 1. Install Framer Motion for premium animations
-say "Installing Framer Motion..."
-npm install framer-motion --silent
+# 0. Ensure xlsx is installed
+say "Checking xlsx dependency..."
+npm install xlsx --silent
 
-# 2. Upgrade Landing Page with Scroll Animations
-say "Upgrading Landing Page with premium scroll animations..."
-backup "src/app/page.tsx"
-cat > "src/app/page.tsx" <<'EOF'
-'use client';
-import Link from 'next/link';
-import LandingConnect from '@/components/LandingConnect';
-import { motion } from 'framer-motion';
+# 1. Add Terminal CSS to globals.css
+MARK="/* CertWinX terminal box */"
+if ! grep -qF "$MARK" "src/app/globals.css" 2>/dev/null; then
+  cat >> "src/app/globals.css" <<'EOF'
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 40 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
-};
-
-const staggerContainer = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.15 } }
-};
-
-export default function LandingPage() {
-  return (
-    <>
-      <header className="landing-header">
-        <div className="container landing-header-inner">
-          <Link href="/" className="landing-logo">
-            <span className="landing-logo-mark">C</span>
-            <span>CertWinX</span>
-          </Link>
-          <nav className="landing-nav">
-            <a href="#features">Features</a>
-            <a href="#how">How it works</a>
-            <a href="#security">Security</a>
-          </nav>
-          <div className="landing-nav-cta">
-            <Link className="btn btn-sm" href="/login">Sign in</Link>
-            <Link className="btn btn-primary btn-sm" href="/signup">Sign up free</Link>
-          </div>
-        </div>
-      </header>
-
-      <section className="landing-hero">
-        <div className="container landing-hero-grid">
-          <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="landing-hero-copy">
-            <motion.span variants={fadeUp} className="landing-eyebrow">
-              <span className="landing-eyebrow-dot" />
-              Connect in 60 seconds · No login required
-            </motion.span>
-            <motion.h1 variants={fadeUp}>
-              Send email campaigns from <span className="gradient-text">your own mailbox</span>.
-            </motion.h1>
-            <motion.p variants={fadeUp} className="landing-lead">
-              CertWinX is a self-hosted email campaign manager for teams that send from their
-              own <strong>Gmail</strong> or <strong>Hostinger Mail</strong> account. No third-party
-              relay, no spoofed senders, no fake deliverability promises.
-            </motion.p>
-            <motion.div variants={fadeUp}>
-              <LandingConnect />
-            </motion.div>
-          </motion.div>
-
-          <motion.div 
-            initial={{ opacity: 0, x: 50 }} 
-            animate={{ opacity: 1, x: 0 }} 
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="landing-hero-visual"
-          >
-            <div className="preview-card">
-              <div className="preview-card-header">
-                <span className="preview-dot" style={{ background: '#FF5F57' }} />
-                <span className="preview-dot" style={{ background: '#FEBC2E' }} />
-                <span className="preview-dot" style={{ background: '#28C840' }} />
-                <span className="preview-title">certwinx.app / senders</span>
-              </div>
-              <div className="preview-card-body">
-                <div className="preview-row">
-                  <div className="preview-avatar" style={{ background: '#DBEAFE', color: '#1E40AF' }}>G</div>
-                  <div className="preview-meta">
-                    <div className="preview-name">you@gmail.com</div>
-                    <div className="preview-sub">Gmail · Connected</div>
-                  </div>
-                  <span className="preview-badge preview-badge-ok">Active</span>
-                </div>
-                <div className="preview-row">
-                  <div className="preview-avatar" style={{ background: '#FEF3C7', color: '#92400E' }}>H</div>
-                  <div className="preview-meta">
-                    <div className="preview-name">hello@yourbrand.com</div>
-                    <div className="preview-sub">Hostinger · Connected</div>
-                  </div>
-                  <span className="preview-badge preview-badge-ok">Active</span>
-                </div>
-              </div>
-            </div>
-            <div className="preview-glow" />
-          </motion.div>
-        </div>
-      </section>
-
-      <section className="section" id="features">
-        <div className="container">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }} variants={fadeUp} className="section-head">
-            <span className="section-eyebrow">Features</span>
-            <h2>Everything you need to run campaigns responsibly</h2>
-            <p className="sub">Real features — no fake metrics, no dead buttons, no promised inbox placement.</p>
-          </motion.div>
-
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-50px" }} variants={staggerContainer} className="grid-3">
-            {[
-              ['Gmail OAuth 2.0', 'Connect Gmail with the minimum send scope. Refresh tokens encrypted at rest.', 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
-              ['Hostinger Mail SMTP', 'Connect Hostinger or Titan Email with just your mailbox password.', 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12'],
-              ['Queue + scheduler', 'Database-backed job queue with atomic claiming, leases, and rolling 24h capacity.', 'M12 2l10 6-10 6-10-6 10-6z'],
-              ['CSV import', 'Contact import with mapping, validation, dedupe, tags, and suppression.', 'M3 3v18h18M7 15l4-4 3 3 5-6'],
-              ['Unsubscribe + suppression', 'One-click List-Unsubscribe, tokenized landing, global suppression list.', 'M18 16v-5a6 6 0 10-12 0v5l-2 3h16l-2-3z'],
-              ['Audit & analytics', 'Every send, connect, pause, export recorded. Accepted != delivered, clearly labeled.', 'M10 2a8 8 0 100 16 8 8 0 000-16z'],
-            ].map(([title, desc, d], i) => (
-              <motion.div key={title} variants={fadeUp} className="feature-card">
-                <div className="feature-icon">
-                  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#1C83F3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
-                </div>
-                <h3>{title}</h3>
-                <p>{desc}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      <footer className="landing-footer">
-        <div className="container landing-footer-inner">
-          <div>
-            <div className="landing-logo" style={{ marginBottom: 8 }}>
-              <span className="landing-logo-mark">C</span>
-              <span>CertWinX</span>
-            </div>
-            <p style={{ color: '#64748B', fontSize: 13, margin: 0 }}>
-              Self-hosted email campaign automation. © {new Date().getFullYear()}
-            </p>
-          </div>
-          <div className="landing-footer-links">
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/terms">Terms</Link>
-            <Link href="/contact">Contact</Link>
-          </div>
-        </div>
-      </footer>
-    </>
-  );
+/* CertWinX terminal box */
+.terminal-box {
+  background: #0a0a0a;
+  color: #00ff00;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  padding: 16px;
+  border-radius: 8px;
+  height: 300px;
+  overflow-y: auto;
+  border: 1px solid #333;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
+  line-height: 1.6;
 }
+.terminal-box::-webkit-scrollbar { width: 8px; }
+.terminal-box::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+.term-green { color: #00ff00; }
+.term-time { color: #888; }
+.term-sender { color: #00bfff; }
+.term-err { color: #ff4444; }
 EOF
+  say "appended terminal CSS"
+fi
 
-# 3. Upgrade Dashboard with Live History (Re-apply just to be sure)
-say "Applying Live Dashboard History..."
+# 2. Update Dashboard (Terminal UI)
 backup "src/app/(app)/dashboard/page.tsx"
-cat > "src/app/(app)/dashboard/page.tsx" <<'EOF'
+write "src/app/(app)/dashboard/page.tsx" <<'EOF'
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 import { useEffect, useState } from 'react';
@@ -172,7 +56,6 @@ type History = { id: string; to_email: string; status: string; accepted_at: stri
 export default function DashboardPage() {
   const [m, setM] = useState<Metrics | null>(null);
   const [history, setHistory] = useState<History[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -180,21 +63,18 @@ export default function DashboardPage() {
         fetch('/api/dashboard', { cache: 'no-store' }),
         fetch('/api/activity', { cache: 'no-store' }),
       ]);
-      if (!r1.ok) throw new Error('metrics load failed');
-      setM(await r1.json());
+      if (r1.ok) setM(await r1.json());
       if (r2.ok) setHistory(await r2.json());
-    } catch (e) { setErr(e instanceof Error ? e.message : 'load failed'); }
+    } catch (e) {}
   }
 
-  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, []);
+  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, []);
 
-  if (err) return <div className="card"><p>Error: {err}</p></div>;
-  if (!m) return <div className="grid-4">{[0,1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 90 }} />)}</div>;
+  if (!m) return <div className="skeleton" style={{ height: 90 }} />;
 
   return (
     <>
       <div className="topbar"><h1>Overview</h1></div>
-      
       <div className="grid-4" style={{ marginBottom: 24 }}>
         {[['Campaigns', m.campaigns],['Queued', m.queued],['Accepted', m.sent],['Failed', m.failed]].map(([k, v]) => (
           <div className="card" key={k as string}><p className="card-title">{k}</p><div className="metric">{v as number}</div></div>
@@ -202,49 +82,295 @@ export default function DashboardPage() {
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>Live Sent History</h2>
-          <p style={{ margin: '4px 0 0', color: '#64748B', fontSize: 13 }}>Recent 50 sends. Auto-refreshes every 15s.</p>
-        </div>
-        {!history ? <div className="skeleton" style={{ height: 200, margin: 20 }} /> : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table" style={{ minWidth: 600 }}>
-              <thead>
-                <tr><th>Time</th><th>To</th><th>Sender</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                {history.map((h) => (
-                  <tr key={h.id}>
-                    <td style={{ color: '#64748B', fontSize: 13 }}>{new Date(h.accepted_at || h.created_at).toLocaleString()}</td>
-                    <td>{h.to_email}</td>
-                    <td>{h.sender_accounts?.google_email || '—'}</td>
-                    <td><span className={`badge ${h.status === 'accepted' ? 'badge-ok' : h.status === 'failed' ? 'badge-err' : 'badge-warn'}`}>{h.status}</span></td>
-                  </tr>
-                ))}
-                {history.length === 0 && (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: 40, color: '#64748B' }}>No history yet.</td></tr>
-                )}
-              </tbody>
-            </table>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16 }}>Live Send Logs</h2>
+            <p style={{ margin: '4px 0 0', color: '#64748B', fontSize: 13 }}>Terminal view. Updates automatically.</p>
           </div>
-        )}
+          <span className="badge badge-ok">Live</span>
+        </div>
+        
+        <div className="terminal-box">
+          {!history ? (
+            <div>Connecting to log stream...</div>
+          ) : history.length === 0 ? (
+            <div>No emails sent yet. Waiting for activity...</div>
+          ) : (
+            history.map((h) => {
+              const time = new Date(h.accepted_at || h.created_at).toLocaleTimeString();
+              const status = h.status.toUpperCase();
+              const isErr = h.status === 'failed' || h.status === 'uncertain';
+              return (
+                <div key={h.id} style={{ marginBottom: 4 }}>
+                  <span className="term-time">[{time}]</span>{' '}
+                  <span className="term-sender">FROM: {h.sender_accounts?.google_email || 'unknown'}</span>{' '}
+                  <span className="term-green">-&gt; TO: {h.to_email}</span>{' '}
+                  <span className={isErr ? 'term-err' : 'term-green'}>[{status}]</span>
+                </div>
+              );
+            })
+          )}
+          <div style={{ marginTop: 10, animation: 'pulse-dot 2s infinite' }}>_</div>
+        </div>
       </div>
     </>
   );
 }
 EOF
 
-# 4. Add Framer Motion package to dependencies just in case
-node -e "
-const fs = require('fs');
-const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-pkg.dependencies['framer-motion'] = '^11.0.0';
-fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-"
+# 3. Update Campaign Page (Excel/CSV Preview + Removed Manage Link)
+backup "src/app/(app)/campaigns/[id]/page.tsx"
+write "src/app/(app)/campaigns/[id]/page.tsx" <<'EOF'
+/* eslint-disable react-hooks/exhaustive-deps */
+'use client';
+import { useEffect, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { useToast } from '@/components/Toast';
+import SpamCheckModal from '@/components/SpamCheckModal';
+import { checkSpam, type SpamReport } from '@/lib/spam';
+import * as XLSX from 'xlsx';
+
+type Campaign = { id: string; name: string; subject: string; html: string; text_body: string; status: string; sender_account_id: string | null; scheduled_at: string | null; segment_tags: string[]; };
+type Sender = { id: string; provider?: string; google_email: string; status: string; paused: boolean };
+
+export default function CampaignDetail() {
+  const { id } = useParams<{ id: string }>();
+  const [c, setC] = useState<Campaign | null>(null);
+  const [senders, setSenders] = useState<Sender[]>([]);
+  const [progress, setProgress] = useState<Record<string, number> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [contactCount, setContactCount] = useState<number | null>(null);
+  
+  const [report, setReport] = useState<SpamReport | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  
+  // File Import states
+  const [importData, setImportData] = useState<any[] | null>(null);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [mapEmail, setMapEmail] = useState('');
+  const [mapName, setMapName] = useState('');
+  const [mappingBusy, setMappingBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { push } = useToast();
+
+  async function load() {
+    const [cr, sr, pr, cc] = await Promise.all([
+      fetch(`/api/campaigns/${id}`, { cache: 'no-store' }),
+      fetch('/api/senders', { cache: 'no-store' }),
+      fetch(`/api/campaigns/${id}/progress`, { cache: 'no-store' }),
+      fetch(`/api/contacts?campaign_id=${id}&count=1`, { cache: 'no-store' }), // only campaign contacts
+    ]);
+    if (cr.ok) setC(await cr.json());
+    if (sr.ok) setSenders(await sr.json());
+    if (pr.ok) setProgress(await pr.json());
+    if (cc.ok) { const j = await cc.json().catch(() => null); if (j && typeof j.count === 'number') setContactCount(j.count); }
+  }
+
+  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    const t = setInterval(() => { fetch(`/api/campaigns/${id}/progress`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => { if (j) setProgress(j); }).catch(() => {}); }, 3000);
+    return () => clearInterval(t);
+  }, [id]);
+
+  async function save(): Promise<boolean> {
+    if (!c) return false;
+    const r = await fetch(`/api/campaigns/${id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: c.name, subject: c.subject, html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id, segment_tags: c.segment_tags, scheduled_at: c.scheduled_at }),
+    });
+    return r.ok;
+  }
+
+  async function saveOnly() { setBusy(true); const ok = await save(); setBusy(false); push(ok ? 'Saved ✅' : 'Save failed'); }
+
+  async function runAction(a: string) {
+    if (!c) return;
+    setBusy(true);
+    const saved = await save();
+    if (!saved) { setBusy(false); push('Could not save campaign'); return; }
+    const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: a }) });
+    const j = await r.json().catch(() => ({}));
+    setBusy(false);
+    if (r.ok) {
+      if (a === 'send_now') push((j.enqueued ?? 0) === 0 ? 'No contacts. Add contacts first.' : `⚡ Enqueued ${j.enqueued}. Sending in background…`);
+      else if (a === 'test_send') push('Test email sent ✅');
+      else push(`${a} ok`);
+      load();
+    } else push(j.error || `${a} failed`);
+  }
+
+  function requestAction(a: string) {
+    if (!c) return;
+    if (a === 'send_now' || a === 'test_send') {
+      const r = checkSpam({ subject: c.subject, html: c.html, text: c.text_body, hasUnsubscribe: a === 'send_now' });
+      setReport(r); setPendingAction(a); setModalOpen(true);
+    } else { runAction(a); }
+  }
+
+  // --- File Parsing ---
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        // Parse both CSV and Excel using xlsx
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        
+        if (data.length === 0) throw new Error('File is empty');
+        setHeaders(Object.keys(data[0] as object));
+        setImportData(data);
+        
+        // Auto-select columns based on common names
+        const keys = Object.keys(data[0] as object);
+        const eCol = keys.find(k => k.toLowerCase().includes('email'));
+        const nCol = keys.find(k => k.toLowerCase().includes('name'));
+        if (eCol) setMapEmail(eCol);
+        if (nCol) setMapName(nCol);
+        
+      } catch (err) { 
+        push('Invalid file format. Please upload CSV or Excel.'); 
+      }
+      if (fileRef.current) fileRef.current.value = '';
+    };
+    reader.readAsBinaryString(file);
+  }
+
+  async function submitMappedData() {
+    if (!importData || !mapEmail) { push('Please select an Email column'); return; }
+    setMappingBusy(true);
+    
+    // Map and filter valid emails
+    const mapped = importData.map(row => ({
+      email: String(row[mapEmail] || '').trim(),
+      first_name: mapName ? String(row[mapName] || '').trim() : undefined,
+    })).filter(x => x.email && x.email.includes('@'));
+    
+    const r = await fetch(`/api/campaigns/${id}/contacts`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ contacts: mapped })
+    });
+    const j = await r.json();
+    
+    if (r.ok) {
+      push(`Imported ${j.inserted} contacts`);
+      // Auto-set subject if they selected a name column and subject doesn't have it
+      if (mapName && c && !c.subject.includes('{{first_name}}')) {
+        const newSub = c.subject ? `${c.subject} - {{first_name}}` : 'Congratulations - {{first_name}}';
+        setC({ ...c, subject: newSub });
+        push('Subject updated with {{first_name}} token');
+      }
+      setImportData(null); setMapEmail(''); setMapName(''); load();
+    } else {
+      push(j.error || 'Import failed');
+    }
+    setMappingBusy(false);
+  }
+
+  if (!c) return <div className="skeleton" style={{ height: 240 }} />;
+
+  const connectedSenders = senders.filter((s) => s.status === 'connected' && !s.paused);
+  const hasSender = connectedSenders.length > 0;
+  const hasContacts = (contactCount ?? 0) > 0;
+
+  return (
+    <>
+      <div className="topbar">
+        <h1>{c.name}</h1>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="btn" onClick={saveOnly} disabled={busy}>Save</button>
+          <button className="btn" onClick={() => requestAction('test_send')} disabled={busy || !hasSender}>Test Send</button>
+          <button className="btn btn-primary" onClick={() => requestAction('send_now')} disabled={busy || !hasSender || !hasContacts}>
+            {busy ? 'Working…' : '⚡ Send Now'}
+          </button>
+          <a className="btn btn-ghost" href={`/api/campaigns/${id}/report`} download>⬇️ Report</a>
+        </div>
+      </div>
+
+      <div className="grid-2" style={{ marginBottom: 20 }}>
+        <div className="card">
+          <p className="card-title">Compose</p>
+          <div className="field"><label>Subject</label><input className="input" value={c.subject} onChange={(e) => setC({ ...c, subject: e.target.value })} /></div>
+          <div className="field"><label>Sender</label>
+            <select className="select" value={c.sender_account_id ?? ''} onChange={(e) => setC({ ...c, sender_account_id: e.target.value || null })}>
+              <option value="">🔄 Auto (round-robin — {connectedSenders.length} active)</option>
+              {senders.map((s) => (<option key={s.id} value={s.id}>[{s.provider === 'hostinger' ? 'Hostinger' : 'Gmail'}] {s.google_email}</option>))}
+            </select>
+          </div>
+          <div className="field"><label>HTML body (use {'{{first_name}}'})</label>
+            <textarea className="textarea" rows={10} value={c.html} onChange={(e) => setC({ ...c, html: e.target.value })} /></div>
+        </div>
+
+        <div>
+          <div className="card" style={{ marginBottom: 20 }}>
+            <p className="card-title">Contacts ({contactCount || 0})</p>
+            
+            {!importData ? (
+              <div style={{ padding: 20, background: '#F8FAFC', borderRadius: 8, textAlign: 'center', border: '1px dashed #CBD5E1' }}>
+                <p style={{ fontSize: 13, marginBottom: 12, color: '#64748B' }}>Upload CSV or Excel (.xlsx, .xls)</p>
+                <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>📁 Select File</button>
+                <input ref={fileRef} type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} onChange={handleFile} />
+              </div>
+            ) : (
+              <div style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <strong style={{ fontSize: 13 }}>Preview File Data ({importData.length} rows)</strong>
+                  <button className="btn btn-sm" onClick={() => setImportData(null)}>Cancel</button>
+                </div>
+                
+                <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+                  <table className="table" style={{ fontSize: 12, minWidth: 300 }}>
+                    <thead>
+                      <tr>{headers.slice(0, 3).map(h => <th key={h}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {importData.slice(0, 3).map((row, i) => (
+                        <tr key={i}>{headers.slice(0, 3).map(h => <td key={h}>{String(row[h]).substring(0, 20)}</td>)}</tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="grid-2" style={{ marginBottom: 12 }}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: 12 }}>Email Column (Required)</label>
+                    <select className="select" value={mapEmail} onChange={e => setMapEmail(e.target.value)}>
+                      <option value="">Select...</option>
+                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: 12 }}>Name Column (Optional)</label>
+                    <select className="select" value={mapName} onChange={e => setMapName(e.target.value)}>
+                      <option value="">Skip</option>
+                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                </div>
+                
+                <button className="btn btn-primary" style={{ width: '100%' }} onClick={submitMappedData} disabled={mappingBusy}>
+                  {mappingBusy ? 'Importing...' : `Import ${importData.length} Contacts`}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <SpamCheckModal open={modalOpen} report={report} busy={busy} onCancel={() => setModalOpen(false)} onConfirm={() => { if (pendingAction) runAction(pendingAction); setModalOpen(false); }} />
+    </>
+  );
+}
+EOF
 
 say ""
-say "✅ Premium Landing Page + Dashboard History applied."
+say "✅ Terminal Dashboard + File Preview integrated."
 say ""
-say "Now run:"
+say "Run:"
 say "  npm run build"
-say "  git add . && git commit -m 'feat: framer motion landing + live dashboard history' && git push"
+say "  git add . && git commit -m 'feat: terminal dashboard, excel support, file preview' && git push"
