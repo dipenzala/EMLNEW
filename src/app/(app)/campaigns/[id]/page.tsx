@@ -16,7 +16,6 @@ export default function CampaignDetail() {
   const [mapEmail, setMapEmail] = useState('');
   const [mapName, setMapName] = useState('');
   const [mappingBusy, setMappingBusy] = useState(false);
-  const [scheduleDate, setScheduleDate] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const { push } = useToast();
 
@@ -26,14 +25,7 @@ export default function CampaignDetail() {
       fetch(`/api/templates`, { cache: 'no-store' }),
       fetch(`/api/contacts?campaign_id=${id}&count=1`, { cache: 'no-store' }),
     ]);
-    if (cr.ok) {
-      const data = await cr.json();
-      setC(data);
-      if (data.scheduled_at) {
-        const d = new Date(data.scheduled_at);
-        setScheduleDate(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
-      }
-    }
+    if (cr.ok) setC(await cr.json());
     if (tr.ok) setTemplates(await tr.json());
     if (cc.ok) { const j = await cc.json().catch(() => null); if (j && typeof j.count === 'number') setContactCount(j.count); }
   }
@@ -52,7 +44,10 @@ export default function CampaignDetail() {
     if (!c) return false;
     const r = await fetch(`/api/campaigns/${id}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: c.name, subject: c.subject, html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id, template_id: c.template_id }),
+      body: JSON.stringify({ 
+        name: c.name, subject: c.subject, 
+        html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id, template_id: c.template_id
+      }),
     });
     return r.ok;
   }
@@ -60,27 +55,11 @@ export default function CampaignDetail() {
   async function runAction(a: string) {
     if (!c) return;
     setBusy(true);
-    const saved = await save();
-    if (!saved) { setBusy(false); push('Could not save campaign'); return; }
+    await save();
     const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: a }) });
-    const j = await r.json().catch(() => ({}));
     setBusy(false);
-    if (r.ok) { push(a === 'send_now' ? `⚡ Sending started!` : 'Success'); load(); } 
-    else push(j.error || 'Failed');
-  }
-
-  async function handleSchedule() {
-    if (!scheduleDate) { push('Please select a date and time'); return; }
-    setBusy(true);
-    const isoDate = new Date(scheduleDate).toISOString();
-    await fetch(`/api/campaigns/${id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: c.name, subject: c.subject, html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id, scheduled_at: isoDate }),
-    });
-    const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'schedule' }) });
-    setBusy(false);
-    if (r.ok) push('Campaign Scheduled ✅'); else push('Scheduling failed');
-    load();
+    if (r.ok) { push(a === 'send_now' ? `⚡ Sending started!` : 'Success'); load(); }
+    else push('Failed');
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -138,7 +117,7 @@ export default function CampaignDetail() {
           </div>
 
           <div className="field"><label>Subject</label><input className="input" value={c.subject || ''} onChange={(e) => setC({ ...c, subject: e.target.value })} /></div>
-          <div className="field"><label>HTML Body</label><textarea className="textarea" style={{ minHeight: 200 }} value={c.html || ''} onChange={(e) => setC({ ...c, html: e.target.value })} /></div>
+          <div className="field"><label>HTML Body</label><textarea className="textarea" style={{ minHeight: 250 }} value={c.html || ''} onChange={(e) => setC({ ...c, html: e.target.value })} /></div>
         </div>
 
         <div>
@@ -166,15 +145,6 @@ export default function CampaignDetail() {
                 <button className="btn" style={{ marginLeft: 8 }} onClick={() => setImportData(null)}>Cancel</button>
               </div>
             )}
-          </div>
-
-          <div className="card">
-            <p className="card-title">Schedule Campaign</p>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <input type="datetime-local" className="input" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
-              <button className="btn btn-primary" onClick={handleSchedule} disabled={busy || !scheduleDate}>Schedule</button>
-            </div>
-            <p style={{ fontSize: 12, color: '#64748B', marginTop: 8 }}>Campaign will automatically start at the selected time.</p>
           </div>
         </div>
       </div>
