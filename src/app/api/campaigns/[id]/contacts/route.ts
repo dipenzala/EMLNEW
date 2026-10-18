@@ -11,7 +11,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const body = await req.json().catch(() => ({}));
   const contacts = body.contacts as Array<{ email: string; first_name?: string; company_name?: string }>;
-  if (!Array.isArray(contacts) || contacts.length === 0) return NextResponse.json({ error: 'no contacts provided' }, { status: 400 });
+  if (!Array.isArray(contacts) || contacts.length === 0) return NextResponse.json({ error: 'no contacts' }, { status: 400 });
 
   const valid = contacts.filter((c) => emailSchema.safeParse(c.email).success).map((c) => ({
     user_id: user.id,
