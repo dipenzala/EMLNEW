@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>();
   const [c, setC] = useState<any>(null);
+  const [templates, setTemplates] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [contactCount, setContactCount] = useState<number | null>(null);
   const [importData, setImportData] = useState<any[] | null>(null);
@@ -20,30 +21,38 @@ export default function CampaignDetail() {
   const { push } = useToast();
 
   async function load() {
-    const [cr, cc] = await Promise.all([
+    const [cr, tr, cc] = await Promise.all([
       fetch(`/api/campaigns/${id}`, { cache: 'no-store' }),
+      fetch(`/api/templates`, { cache: 'no-store' }),
       fetch(`/api/contacts?campaign_id=${id}&count=1`, { cache: 'no-store' }),
     ]);
     if (cr.ok) {
       const data = await cr.json();
       setC(data);
       if (data.scheduled_at) {
-        // Format to YYYY-MM-DDTHH:mm for datetime-local
         const d = new Date(data.scheduled_at);
-        const isoStr = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        setScheduleDate(isoStr);
+        setScheduleDate(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
       }
     }
+    if (tr.ok) setTemplates(await tr.json());
     if (cc.ok) { const j = await cc.json().catch(() => null); if (j && typeof j.count === 'number') setContactCount(j.count); }
   }
 
   useEffect(() => { load(); }, [id]);
 
+  function applyTemplate(tplId: string) {
+    const tpl = templates.find(t => t.id === tplId);
+    if (tpl && c) {
+      setC({ ...c, subject: tpl.subject, html: tpl.html, text_body: tpl.text_body, template_id: tplId });
+      push('Template applied');
+    }
+  }
+
   async function save() {
     if (!c) return false;
     const r = await fetch(`/api/campaigns/${id}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: c.name, subject: c.subject, html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id }),
+      body: JSON.stringify({ name: c.name, subject: c.subject, html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id, template_id: c.template_id }),
     });
     return r.ok;
   }
@@ -56,10 +65,8 @@ export default function CampaignDetail() {
     const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: a }) });
     const j = await r.json().catch(() => ({}));
     setBusy(false);
-    if (r.ok) {
-      push(a === 'send_now' ? `⚡ Sending started!` : 'Success');
-      load();
-    } else push(j.error || 'Failed');
+    if (r.ok) { push(a === 'send_now' ? `⚡ Sending started!` : 'Success'); load(); } 
+    else push(j.error || 'Failed');
   }
 
   async function handleSchedule() {
@@ -72,8 +79,7 @@ export default function CampaignDetail() {
     });
     const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'schedule' }) });
     setBusy(false);
-    if (r.ok) push('Campaign Scheduled ✅');
-    else push('Scheduling failed');
+    if (r.ok) push('Campaign Scheduled ✅'); else push('Scheduling failed');
     load();
   }
 
@@ -100,23 +106,14 @@ export default function CampaignDetail() {
   async function submitMappedData() {
     if (!importData || !mapEmail) { push('Select an Email column'); return; }
     setMappingBusy(true);
-    const mapped = importData.map(r => ({
-      email: String(r[mapEmail] || '').trim(),
-      first_name: mapName ? String(r[mapName] || '').trim() : undefined,
-    })).filter(x => x.email.includes('@'));
-    
-    const r = await fetch(`/api/campaigns/${id}/contacts`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ contacts: mapped })
-    });
-    if (r.ok) {
-      push('Contacts imported');
-      setImportData(null); load();
-    } else push('Import failed');
+    const mapped = importData.map(r => ({ email: String(r[mapEmail] || '').trim(), first_name: mapName ? String(r[mapName] || '').trim() : undefined })).filter(x => x.email.includes('@'));
+    const r = await fetch(`/api/campaigns/${id}/contacts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contacts: mapped }) });
+    if (r.ok) { push('Contacts imported'); setImportData(null); load(); }
+    else push('Import failed');
     setMappingBusy(false);
   }
 
-  if (!c) return <div>Loading...</div>;
+  if (!c) return <div className="skeleton" style={{ height: 200 }} />;
 
   return (
     <div>
@@ -131,8 +128,17 @@ export default function CampaignDetail() {
       <div className="grid-2">
         <div className="card">
           <p className="card-title">Compose</p>
-          <div className="field"><label>Subject</label><input className="input" value={c.subject} onChange={(e) => setC({ ...c, subject: e.target.value })} /></div>
-          <div className="field"><label>HTML</label><textarea className="textarea" style={{ minHeight: 200 }} value={c.html} onChange={(e) => setC({ ...c, html: e.target.value })} /></div>
+          
+          <div className="field">
+            <label>Choose Template</label>
+            <select className="select" value={c.template_id || ''} onChange={(e) => applyTemplate(e.target.value)}>
+              <option value="">-- Select a Template --</option>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+
+          <div className="field"><label>Subject</label><input className="input" value={c.subject || ''} onChange={(e) => setC({ ...c, subject: e.target.value })} /></div>
+          <div className="field"><label>HTML Body</label><textarea className="textarea" style={{ minHeight: 200 }} value={c.html || ''} onChange={(e) => setC({ ...c, html: e.target.value })} /></div>
         </div>
 
         <div>
@@ -165,19 +171,10 @@ export default function CampaignDetail() {
           <div className="card">
             <p className="card-title">Schedule Campaign</p>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <input 
-                type="datetime-local" 
-                className="input" 
-                value={scheduleDate} 
-                onChange={e => setScheduleDate(e.target.value)} 
-              />
-              <button className="btn btn-primary" onClick={handleSchedule} disabled={busy || !scheduleDate}>
-                Schedule
-              </button>
+              <input type="datetime-local" className="input" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+              <button className="btn btn-primary" onClick={handleSchedule} disabled={busy || !scheduleDate}>Schedule</button>
             </div>
-            <p style={{ fontSize: 12, color: '#64748B', marginTop: 8 }}>
-              Campaign will automatically start at the selected time.
-            </p>
+            <p style={{ fontSize: 12, color: '#64748B', marginTop: 8 }}>Campaign will automatically start at the selected time.</p>
           </div>
         </div>
       </div>

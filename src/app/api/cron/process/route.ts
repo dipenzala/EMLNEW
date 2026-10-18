@@ -21,34 +21,31 @@ export async function GET(req: Request) {
   const admin = createSupabaseAdmin();
 
   // 1. Start scheduled campaigns that are due
-  const { data: dueCampaigns } = await admin
-    .from('campaigns')
-    .select('id,user_id')
-    .eq('status', 'scheduled')
-    .lte('scheduled_at', new Date().toISOString())
-    .limit(5);
-
-  if (dueCampaigns && dueCampaigns.length > 0) {
+  const { data: dueCampaigns } = await admin.from('campaigns').select('id,user_id').eq('status', 'scheduled').lte('scheduled_at', new Date().toISOString()).limit(5);
+  if (dueCampaigns) {
     for (const c of dueCampaigns) {
       await admin.from('campaigns').update({ status: 'running' }).eq('id', c.id);
       await enqueueCampaignJobs(c.id);
-      log('cron.campaign.started', { campaignId: c.id });
     }
   }
 
-  // 2. Process queue
-  const { data: profiles } = await admin.from('profiles').select('id,batch_size,global_sending_enabled').eq('global_sending_enabled', true).limit(25);
-  let claimed = 0, sent = 0, failed = 0;
+  // 2. Find all users with pending queued jobs and trigger the self-draining chain
+  const { data: pendingJobs } = await admin.from('email_jobs').select('user_id').eq('status', 'queued').limit(100);
+  const userIds = Array.from(new Set(pendingJobs?.map(j => j.user_id) || []));
   
-  for (const p of profiles ?? []) {
-    const limit = Math.min(Number(process.env.MAX_BATCH_SIZE ?? 5), p.batch_size ?? 5);
-    try {
-      const r = await processBatch(p.id, limit);
-      claimed += r.claimed;
-      sent += r.sent;
-      failed += r.failed;
-    } catch (e) {}
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const secret = process.env.CRON_SECRET;
+
+  // Trigger /api/drain for each user with pending emails
+  if (appUrl && secret) {
+    for (const userId of userIds) {
+      fetch(`${appUrl}/api/drain`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
+        body: JSON.stringify({ userId, depth: 0 }),
+      }).catch(() => {});
+    }
   }
 
-  return NextResponse.json({ ok: true, claimed, sent, failed, campaigns_started: dueCampaigns?.length ?? 0 });
+  return NextResponse.json({ ok: true, triggered_users: userIds.length });
 }
