@@ -1,4 +1,3 @@
-import { waitUntil } from '@vercel/functions';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUser } from '@/lib/auth';
@@ -8,7 +7,7 @@ import { log, logError } from '@/lib/logger';
 import { sendViaSender } from '@/lib/mailer';
 import { renderTemplate, sanitizeUserHtml, toPlainText } from '@/lib/template';
 
-const schema = z.object({ action: z.enum(['enqueue','start','pause','resume','cancel','archive','duplicate','test_send','send_now']) });
+const schema = z.object({ action: z.enum(['enqueue','start','pause','resume','cancel','archive','duplicate','test_send','send_now','schedule']) });
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const user = await requireUser();
@@ -21,10 +20,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { data: c } = await sb.from('campaigns').select('*').eq('id', params.id).eq('user_id', user.id).maybeSingle();
   if (!c) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
+  if (action === 'schedule') {
+    const admin = createSupabaseAdmin();
+    const { error } = await admin.from('campaigns').update({ status: 'scheduled' }).eq('id', c.id).eq('user_id', user.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    log('campaign.scheduled', { userId: user.id, campaignId: c.id });
+    return NextResponse.json({ ok: true, status: 'scheduled' });
+  }
+
   if (action === 'test_send') {
     let senderId = c.sender_account_id;
     if (!senderId) {
-      const { data: anySender } = await sb.from('sender_accounts').select('id').eq('status', 'connected').eq('paused', false).limit(1).maybeSingle();
+      const { data: anySender } = await sb.from('sender_accounts').select('id').eq('user_id', user.id).eq('status', 'connected').eq('paused', false).limit(1).maybeSingle();
       senderId = anySender?.id ?? null;
     }
     if (!senderId) return NextResponse.json({ error: 'No connected sender. Go to Senders → Connect Google or Hostinger.' }, { status: 400 });
@@ -34,13 +41,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       const html = sanitizeUserHtml(renderTemplate(c.html ?? '', tokens, { html: false }));
       const text = c.text_body?.trim() || toPlainText(html);
       const subject = renderTemplate(c.subject ?? '', tokens, { html: false });
-      await sendViaSender(senderId, {
-        to: user.email!,
-        from: `${sender?.display_name || 'CertWinX'} <${sender?.google_email}>`,
-        subject: `[TEST] ${subject}`,
-        html,
-        text,
-      });
+      await sendViaSender(senderId, { to: user.email!, from: `${sender?.display_name || 'CertWinX'} <${sender?.google_email}>`, subject: `[TEST] ${subject}`, html, text });
       log('campaign.test_send', { userId: user.id, campaignId: c.id, senderId });
       return NextResponse.json({ ok: true });
     } catch (e) {
@@ -49,39 +50,28 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
   }
 
-  if (action === 'enqueue') {
-    try {
-      const count = await enqueueCampaignJobs(c.id);
-      log('campaign.enqueued', { userId: user.id, campaignId: c.id, count });
-      return NextResponse.json({ ok: true, count });
-    } catch (e) {
-      return NextResponse.json({ error: e instanceof Error ? e.message : 'enqueue failed' }, { status: 500 });
-    }
-  }
-
   if (action === 'send_now') {
     if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') {
-      return NextResponse.json({ error: 'Global sending is disabled. Set GLOBAL_SENDING_ENABLED=true in .env.local, restart the dev server, and toggle "Global sending enabled" in Settings.' }, { status: 400 });
+      return NextResponse.json({ error: 'Global sending is disabled.' }, { status: 400 });
     }
-    const { data: senders } = await sb.from('sender_accounts').select('id').eq('status', 'connected').eq('paused', false);
-    if (!senders || senders.length === 0) return NextResponse.json({ error: 'No connected sender. Go to Senders → Connect Google or Hostinger.' }, { status: 400 });
+    const { data: senders } = await sb.from('sender_accounts').select('id').eq('user_id', user.id).eq('status', 'connected').eq('paused', false);
+    if (!senders || senders.length === 0) return NextResponse.json({ error: 'No connected sender.' }, { status: 400 });
     const admin = createSupabaseAdmin();
     await admin.from('campaigns').update({ status: 'running' }).eq('id', c.id).eq('user_id', user.id);
     const enqueued = await enqueueCampaignJobs(c.id);
-    if (enqueued === 0) return NextResponse.json({ ok: true, enqueued: 0, sent: 0, failed: 0, note: 'No contacts to send. Upload a CSV first.' });
+    if (enqueued === 0) return NextResponse.json({ ok: true, enqueued: 0, note: 'No contacts.' });
+    
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     const secret = process.env.CRON_SECRET;
     if (appUrl && secret) {
-      waitUntil(
-        fetch(`${appUrl}/api/drain`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
-          body: JSON.stringify({ userId: user.id, depth: 0 }),
-        }).catch(() => {}),
-      );
+      fetch(`${appUrl}/api/drain`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
+        body: JSON.stringify({ userId: user.id, depth: 0 }),
+      }).catch(() => {});
     }
-    log('campaign.send_now.enqueued', { userId: user.id, campaignId: c.id, enqueued });
-    return NextResponse.json({ ok: true, enqueued, note: 'Sending in background — refresh to see progress' });
+    log('campaign.send_now', { userId: user.id, campaignId: c.id, enqueued });
+    return NextResponse.json({ ok: true, enqueued });
   }
 
   if (action === 'duplicate') {

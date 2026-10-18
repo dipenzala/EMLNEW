@@ -15,6 +15,7 @@ export default function CampaignDetail() {
   const [mapEmail, setMapEmail] = useState('');
   const [mapName, setMapName] = useState('');
   const [mappingBusy, setMappingBusy] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const { push } = useToast();
 
@@ -23,7 +24,16 @@ export default function CampaignDetail() {
       fetch(`/api/campaigns/${id}`, { cache: 'no-store' }),
       fetch(`/api/contacts?campaign_id=${id}&count=1`, { cache: 'no-store' }),
     ]);
-    if (cr.ok) setC(await cr.json());
+    if (cr.ok) {
+      const data = await cr.json();
+      setC(data);
+      if (data.scheduled_at) {
+        // Format to YYYY-MM-DDTHH:mm for datetime-local
+        const d = new Date(data.scheduled_at);
+        const isoStr = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        setScheduleDate(isoStr);
+      }
+    }
     if (cc.ok) { const j = await cc.json().catch(() => null); if (j && typeof j.count === 'number') setContactCount(j.count); }
   }
 
@@ -47,9 +57,24 @@ export default function CampaignDetail() {
     const j = await r.json().catch(() => ({}));
     setBusy(false);
     if (r.ok) {
-      push(a === 'send_now' ? `⚡ Enqueued ${j.enqueued}. Sending in background…` : 'Success');
+      push(a === 'send_now' ? `⚡ Sending started!` : 'Success');
       load();
     } else push(j.error || 'Failed');
+  }
+
+  async function handleSchedule() {
+    if (!scheduleDate) { push('Please select a date and time'); return; }
+    setBusy(true);
+    const isoDate = new Date(scheduleDate).toISOString();
+    await fetch(`/api/campaigns/${id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: c.name, subject: c.subject, html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id, scheduled_at: isoDate }),
+    });
+    const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'schedule' }) });
+    setBusy(false);
+    if (r.ok) push('Campaign Scheduled ✅');
+    else push('Scheduling failed');
+    load();
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -110,30 +135,50 @@ export default function CampaignDetail() {
           <div className="field"><label>HTML</label><textarea className="textarea" style={{ minHeight: 200 }} value={c.html} onChange={(e) => setC({ ...c, html: e.target.value })} /></div>
         </div>
 
-        <div className="card">
-          <p className="card-title">Contacts ({contactCount || 0})</p>
-          {!importData ? (
-            <div style={{ padding: 20, textAlign: 'center', border: '1px dashed #ccc', borderRadius: 8 }}>
-              <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Upload Excel/CSV</button>
-              <input ref={fileRef} type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} onChange={handleFile} />
-            </div>
-          ) : (
-            <div style={{ padding: 16, background: '#f5f5f5', borderRadius: 8 }}>
-              <h4>Preview ({importData.length} rows)</h4>
-              <div style={{ display: 'flex', gap: 10, margin: '10px 0' }}>
-                 <select className="select" value={mapEmail} onChange={e => setMapEmail(e.target.value)}>
-                    <option value="">Email Col...</option>
-                    {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                 </select>
-                 <select className="select" value={mapName} onChange={e => setMapName(e.target.value)}>
-                    <option value="">Name Col (Opt)</option>
-                    {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                 </select>
+        <div>
+          <div className="card" style={{ marginBottom: 20 }}>
+            <p className="card-title">Contacts ({contactCount || 0})</p>
+            {!importData ? (
+              <div style={{ padding: 20, textAlign: 'center', border: '1px dashed #ccc', borderRadius: 8 }}>
+                <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Upload Excel/CSV</button>
+                <input ref={fileRef} type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} onChange={handleFile} />
               </div>
-              <button className="btn btn-primary" onClick={submitMappedData} disabled={mappingBusy}>Import</button>
-              <button className="btn" style={{ marginLeft: 8 }} onClick={() => setImportData(null)}>Cancel</button>
+            ) : (
+              <div style={{ padding: 16, background: '#f5f5f5', borderRadius: 8 }}>
+                <h4>Preview ({importData.length} rows)</h4>
+                <div style={{ display: 'flex', gap: 10, margin: '10px 0' }}>
+                  <select className="select" value={mapEmail} onChange={e => setMapEmail(e.target.value)}>
+                      <option value="">Email Col...</option>
+                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                  <select className="select" value={mapName} onChange={e => setMapName(e.target.value)}>
+                      <option value="">Name Col (Opt)</option>
+                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <button className="btn btn-primary" onClick={submitMappedData} disabled={mappingBusy}>Import</button>
+                <button className="btn" style={{ marginLeft: 8 }} onClick={() => setImportData(null)}>Cancel</button>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <p className="card-title">Schedule Campaign</p>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <input 
+                type="datetime-local" 
+                className="input" 
+                value={scheduleDate} 
+                onChange={e => setScheduleDate(e.target.value)} 
+              />
+              <button className="btn btn-primary" onClick={handleSchedule} disabled={busy || !scheduleDate}>
+                Schedule
+              </button>
             </div>
-          )}
+            <p style={{ fontSize: 12, color: '#64748B', marginTop: 8 }}>
+              Campaign will automatically start at the selected time.
+            </p>
+          </div>
         </div>
       </div>
     </div>
