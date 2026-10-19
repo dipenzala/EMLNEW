@@ -15,7 +15,6 @@ export default function CampaignDetail() {
   const [recentContacts, setRecentContacts] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   
-  // Import states
   const [importData, setImportData] = useState<any[] | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapEmail, setMapEmail] = useState('');
@@ -46,16 +45,16 @@ export default function CampaignDetail() {
 
   useEffect(() => { 
     load(); 
-    const t = setInterval(load, 3000); // Fast poll for live tracking
+    const t = setInterval(load, 3000); 
     return () => clearInterval(t); 
   }, [id]);
 
   function applyTemplate(tplId: string) {
-    if (!tplId) return; // Ignore empty selection
+    if (!tplId) return;
     const tpl = templates.find(t => t.id === tplId);
     if (tpl && c) {
       setC({ ...c, subject: tpl.subject, html: tpl.html, text_body: tpl.text_body, template_id: tplId });
-      push('Template applied successfully');
+      push('Template applied, please save or upload contacts');
     }
   }
 
@@ -68,26 +67,19 @@ export default function CampaignDetail() {
     return r.ok;
   }
 
+  async function saveOnly() {
+    setBusy(true); const ok = await save(); setBusy(false); 
+    push(ok ? 'Campaign Saved ✅' : 'Save failed');
+  }
+
   async function runAction(a: string) {
     if (!c) return;
     setBusy(true);
     await save();
     const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: a }) });
-    const j = await r.json().catch(() => ({}));
     setBusy(false);
-    if (r.ok) { 
-      push(a === 'send_now' ? `⚡ Sending started!` : 'Success'); 
-      load(); 
-    }
-    else push(j.error || 'Failed');
-  }
-
-  async function forceProcess() {
-    setBusy(true);
-    const r = await fetch('/api/process-batch', { method: 'POST' });
-    setBusy(false);
-    if (r.ok) { push('Queue processed manually ✅'); load(); }
-    else push('Force process failed');
+    if (r.ok) { push(`⚡ Sending started!`); load(); }
+    else push('Failed');
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -115,6 +107,9 @@ export default function CampaignDetail() {
     if (!importData || !mapEmail) { push('Select an Email column'); return; }
     setMappingBusy(true);
     
+    // 1. Save current template/subject first so it doesn't get overwritten
+    await save(); 
+
     const mapped = importData.map(r => ({ 
       email: String(r[mapEmail] || '').trim(), 
       first_name: mapName ? String(r[mapName] || '').trim() : undefined 
@@ -147,25 +142,18 @@ export default function CampaignDetail() {
 
   if (!c) return <div className="skeleton" style={{ height: 200 }} />;
 
-  const isRunning = c.status === 'running' || progress?.queued > 0;
-
   return (
     <div>
       <div className="topbar">
         <h1>{c.name}</h1>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn" onClick={save}>Save</button>
+          <button className="btn" onClick={saveOnly}>Save</button>
           <button className="btn btn-primary" onClick={() => runAction('send_now')} disabled={busy}>⚡ Send Now</button>
         </div>
       </div>
 
-      {/* LIVE PROGRESS TRACKER */}
-      {isRunning && (
+      {(c.status === 'running' || progress?.queued > 0) && (
         <div className="card" style={{ marginBottom: 20, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <h3 style={{ margin: 0, fontSize: 16 }}>⚡ Live Campaign Progress</h3>
-            <button className="btn btn-sm" onClick={forceProcess} disabled={busy}>Force Process Queue</button>
-          </div>
           <div style={{ display: 'flex', gap: 20 }}>
             <div><strong>Total:</strong> {progress?.total || 0}</div>
             <div style={{ color: '#D97706' }}><strong>Queued:</strong> {progress?.queued || 0}</div>
@@ -184,7 +172,6 @@ export default function CampaignDetail() {
           
           <div className="field">
             <label>Choose Template</label>
-            {/* FIXED: Use empty string if null, and only apply if value is truthy */}
             <select className="select" value={c.template_id || ''} onChange={(e) => applyTemplate(e.target.value)}>
               <option value="">-- Select a Template --</option>
               {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -232,30 +219,6 @@ export default function CampaignDetail() {
               </div>
             )}
           </div>
-
-          {/* RECENT EMAIL STATUS */}
-          {recentContacts.length > 0 && (
-            <div className="card">
-              <p className="card-title">Recent Email Status</p>
-              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                <table className="table" style={{ fontSize: 12 }}>
-                  <thead><tr><th>Email</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {recentContacts.map((rc, i) => (
-                      <tr key={i}>
-                        <td>{rc.to_email}</td>
-                        <td>
-                          <span className={`badge ${rc.status === 'accepted' ? 'badge-ok' : rc.status === 'failed' ? 'badge-err' : 'badge-warn'}`}>
-                            {rc.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

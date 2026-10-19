@@ -9,7 +9,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const load = () => {
       fetch('/api/dashboard', { cache: 'no-store' }).then(r => r.json()).then(setM).catch(() => {});
-      fetch('/api/activity', { cache: 'no-store' }).then(r => r.json()).then(data => {
+      fetch('/api/dashboard/logs', { cache: 'no-store' }).then(r => r.json()).then(data => {
         if (Array.isArray(data)) setHistory(data); else setHistory([]);
       }).catch(() => setHistory([]));
     };

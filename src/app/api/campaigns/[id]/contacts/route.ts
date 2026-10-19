@@ -12,20 +12,25 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const body = await req.json().catch(() => ({}));
   const contacts = body.contacts as Array<{ email: string; first_name?: string; company_name?: string }>;
-  
   if (!Array.isArray(contacts) || contacts.length === 0) return NextResponse.json({ error: 'no contacts' }, { status: 400 });
 
-  const valid = contacts.filter((c) => emailSchema.safeParse(c.email).success).map((c) => ({
-    user_id: user.id,
-    campaign_id: params.id,
-    email: c.email.toLowerCase().trim(),
-    first_name: c.first_name || null,
-    company_name: c.company_name || null,
-    source: 'campaign-import',
-  }));
+  // Deduplicate within the chunk itself to prevent ON CONFLICT errors
+  const uniqueContacts = new Map();
+  contacts.forEach(c => {
+    const e = String(c.email || '').trim().toLowerCase();
+    if (emailSchema.safeParse(e).success) {
+      uniqueContacts.set(e, { 
+        user_id: user.id, campaign_id: params.id, email: e, 
+        first_name: c.first_name ? String(c.first_name).trim() : null, 
+        source: 'campaign-import'
+      });
+    }
+  });
 
+  const valid = Array.from(uniqueContacts.values());
   let inserted = 0;
-  // Chunk into 500 per query to avoid Supabase payload limits
+
+  // Insert in chunks of 500 to prevent DB timeouts
   for (let i = 0; i < valid.length; i += 500) {
     const chunk = valid.slice(i, i + 500);
     const { error, count } = await admin
@@ -33,6 +38,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       .upsert(chunk, { onConflict: 'campaign_id,email', ignoreDuplicates: true, count: 'exact' });
     
     if (!error) inserted += count ?? 0;
+    else console.error("Chunk insert error:", error);
   }
   
   return NextResponse.json({ ok: true, inserted });
