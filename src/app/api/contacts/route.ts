@@ -9,15 +9,27 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const sb = createSupabaseServer();
   
-  // Only fetch GLOBAL contacts (campaign_id IS NULL)
-  let query = sb.from('contacts')
-    .select('id, email, first_name, unsubscribed, created_at')
-    .eq('user_id', user.id)
-    .is('campaign_id', null)
-    .order('created_at', { ascending: false })
-    .limit(100);
+  const campaignId = url.searchParams.get('campaign_id');
+  const isCount = url.searchParams.get('count') === '1';
 
-  const { data, error } = await query;
+  let query = sb.from('contacts').select('id, email, first_name, created_at', { count: 'exact' }).eq('user_id', user.id);
+
+  // Agar campaign_id hai, toh sirf usi campaign ke contacts gino
+  if (campaignId) {
+    query = query.eq('campaign_id', campaignId);
+  } else {
+    // Warna global contacts gino
+    query = query.is('campaign_id', null);
+  }
+
+  if (isCount) {
+    const { count, error } = await query;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ count: count || 0 });
+  }
+
+  // Normal list fetch
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }
