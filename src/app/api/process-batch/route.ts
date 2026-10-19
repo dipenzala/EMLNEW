@@ -4,17 +4,28 @@ import { processBatch } from '@/lib/queue';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST() {
+export async function POST(req: Request) {
   const user = await requireUser();
   
-  // Only rely on the ENV variable for global killswitch
   if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') {
-    return NextResponse.json({ error: 'Global sending is disabled in environment variables.' }, { status: 400 });
+    return NextResponse.json({ error: 'Global sending is disabled.' }, { status: 400 });
   }
 
   try { 
-    // Process a batch of 50 emails manually
+    // Process first batch of 50
     const result = await processBatch(user.id, 50); 
+    
+    // 🔥 TRIGGER THE BACKGROUND LOOP (Chain)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const secret = process.env.CRON_SECRET;
+    if (appUrl && secret) {
+      fetch(`${appUrl}/api/drain`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
+        body: JSON.stringify({ userId: user.id, depth: 0 }),
+      }).catch(() => {});
+    }
+    
     return NextResponse.json(result); 
   }
   catch (e) { 

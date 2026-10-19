@@ -159,7 +159,7 @@ export default function CampaignDetail() {
             <div style={{ color: '#16A34A' }}><strong>Sent:</strong> {progress.accepted}</div>
             <div style={{ color: '#DC2626' }}><strong>Failed:</strong> {progress.failed}</div>
             {progress.queued > 0 && (
-              <button className="btn btn-sm" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={processManualQueue} disabled={busy}>▶ Process 50 Emails</button>
+              <button className="btn btn-sm" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={processManualQueue} disabled={busy}>▶ Start Auto-Sending (Background)</button>
             )}
           </div>
         </div>
