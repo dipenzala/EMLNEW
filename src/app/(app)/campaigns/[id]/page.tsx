@@ -166,7 +166,7 @@ export default function CampaignDetail() {
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn" onClick={async () => { if(await save()) push('Saved ✅'); }} disabled={busy}>Save</button>
           <button className="btn btn-primary" onClick={startCampaign} disabled={busy}>⚡ Start Sending</button>
-          {progress?.queued > 0 && (
+          {progress && progress.queued > 0 && (
             <button className="btn" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={processManualQueue} disabled={busy}>▶ Process 50 Emails</button>
           )}
         </div>
@@ -176,7 +176,7 @@ export default function CampaignDetail() {
         <div className="card" style={{ marginBottom: 20, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
           <h3 style={{ margin: '0 0 10px', fontSize: 16 }}>📊 Live Campaign Tracking</h3>
           <div style={{ display: 'flex', gap: 30 }}>
-            <div><strong>Total Contacts:</strong> {progress.total}</div>
+            <div><strong>Total Uploaded:</strong> {contactCount}</div>
             <div style={{ color: '#D97706' }}><strong>In Queue:</strong> {progress.queued}</div>
             <div style={{ color: '#16A34A' }}><strong>Sent:</strong> {progress.accepted}</div>
             <div style={{ color: '#DC2626' }}><strong>Failed:</strong> {progress.failed}</div>
