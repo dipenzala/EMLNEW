@@ -145,6 +145,9 @@ export default function CampaignDetail() {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button className="btn" onClick={async () => { if(await save()) push('Saved ✅'); }} disabled={busy}>Save</button>
           <button className="btn btn-primary" onClick={startCampaign} disabled={busy || c.status === 'running'}>⚡ Start</button>
+          {progress?.queued > 0 && (
+            <button className="btn" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 'bold' }} onClick={processManualQueue} disabled={busy}>▶ Auto-Send Active</button>
+          )}
           <button className="btn" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={stopCampaign} disabled={busy || c.status !== 'running'}>🛑 Stop</button>
           <button className="btn btn-danger" onClick={deleteCampaign} disabled={busy}>🗑 Delete</button>
         </div>
@@ -158,9 +161,7 @@ export default function CampaignDetail() {
             <div style={{ color: '#D97706' }}><strong>In Queue:</strong> {progress.queued}</div>
             <div style={{ color: '#16A34A' }}><strong>Sent:</strong> {progress.accepted}</div>
             <div style={{ color: '#DC2626' }}><strong>Failed:</strong> {progress.failed}</div>
-            {progress.queued > 0 && (
-              <button className="btn btn-sm" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={processManualQueue} disabled={busy}>▶ Start Auto-Sending (Background)</button>
-            )}
+
           </div>
         </div>
       )}
