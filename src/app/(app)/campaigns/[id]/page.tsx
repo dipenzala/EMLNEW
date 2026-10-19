@@ -16,6 +16,8 @@ export default function CampaignDetail() {
   const [mapEmail, setMapEmail] = useState('');
   const [mapName, setMapName] = useState('');
   const [mappingBusy, setMappingBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  
   const fileRef = useRef<HTMLInputElement>(null);
   const { push } = useToast();
 
@@ -44,10 +46,7 @@ export default function CampaignDetail() {
     if (!c) return false;
     const r = await fetch(`/api/campaigns/${id}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ 
-        name: c.name, subject: c.subject, 
-        html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id, template_id: c.template_id
-      }),
+      body: JSON.stringify({ name: c.name, subject: c.subject, html: c.html, text_body: c.text_body, sender_account_id: c.sender_account_id, template_id: c.template_id }),
     });
     return r.ok;
   }
@@ -80,16 +79,43 @@ export default function CampaignDetail() {
       } catch (err) { push('Invalid file format.'); }
     };
     reader.readAsBinaryString(file);
+    if (fileRef.current) fileRef.current.value = '';
   }
 
   async function submitMappedData() {
     if (!importData || !mapEmail) { push('Select an Email column'); return; }
     setMappingBusy(true);
-    const mapped = importData.map(r => ({ email: String(r[mapEmail] || '').trim(), first_name: mapName ? String(r[mapName] || '').trim() : undefined })).filter(x => x.email.includes('@'));
-    const r = await fetch(`/api/campaigns/${id}/contacts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contacts: mapped }) });
-    if (r.ok) { push('Contacts imported'); setImportData(null); load(); }
-    else push('Import failed');
+    
+    const mapped = importData.map(r => ({ 
+      email: String(r[mapEmail] || '').trim(), 
+      first_name: mapName ? String(r[mapName] || '').trim() : undefined 
+    })).filter(x => x.email.includes('@'));
+
+    const CHUNK_SIZE = 1000; // 1k per request prevents Vercel timeout/payload limit
+    let totalInserted = 0;
+
+    for (let i = 0; i < mapped.length; i += CHUNK_SIZE) {
+      const chunk = mapped.slice(i, i + CHUNK_SIZE);
+      setUploadProgress(`Importing ${Math.min(i + CHUNK_SIZE, mapped.length)} / ${mapped.length}...`);
+
+      const r = await fetch(`/api/campaigns/${id}/contacts`, { 
+        method: 'POST', headers: { 'content-type': 'application/json' }, 
+        body: JSON.stringify({ contacts: chunk }) 
+      });
+      
+      if (r.ok) {
+        const j = await r.json();
+        totalInserted += (j.inserted || 0);
+      } else {
+        push('A chunk failed to import, continuing...');
+      }
+    }
+
+    push(`✅ Successfully imported ${totalInserted} contacts`);
+    setImportData(null); 
+    setUploadProgress('');
     setMappingBusy(false);
+    load();
   }
 
   if (!c) return <div className="skeleton" style={{ height: 200 }} />;
@@ -107,7 +133,6 @@ export default function CampaignDetail() {
       <div className="grid-2">
         <div className="card">
           <p className="card-title">Compose</p>
-          
           <div className="field">
             <label>Choose Template</label>
             <select className="select" value={c.template_id || ''} onChange={(e) => applyTemplate(e.target.value)}>
@@ -115,7 +140,6 @@ export default function CampaignDetail() {
               {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
-
           <div className="field"><label>Subject</label><input className="input" value={c.subject || ''} onChange={(e) => setC({ ...c, subject: e.target.value })} /></div>
           <div className="field"><label>HTML Body</label><textarea className="textarea" style={{ minHeight: 250 }} value={c.html || ''} onChange={(e) => setC({ ...c, html: e.target.value })} /></div>
         </div>
@@ -123,9 +147,10 @@ export default function CampaignDetail() {
         <div>
           <div className="card" style={{ marginBottom: 20 }}>
             <p className="card-title">Contacts ({contactCount || 0})</p>
+            
             {!importData ? (
               <div style={{ padding: 20, textAlign: 'center', border: '1px dashed #ccc', borderRadius: 8 }}>
-                <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Upload Excel/CSV</button>
+                <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Upload Excel/CSV (Max 1 Lakh)</button>
                 <input ref={fileRef} type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} onChange={handleFile} />
               </div>
             ) : (
@@ -141,8 +166,17 @@ export default function CampaignDetail() {
                       {headers.map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
                 </div>
-                <button className="btn btn-primary" onClick={submitMappedData} disabled={mappingBusy}>Import</button>
-                <button className="btn" style={{ marginLeft: 8 }} onClick={() => setImportData(null)}>Cancel</button>
+                
+                {uploadProgress ? (
+                  <div style={{ padding: 12, background: '#DBEAFE', color: '#1E40AF', borderRadius: 8, fontSize: 14, fontWeight: 'bold' }}>
+                    ⏳ {uploadProgress}
+                  </div>
+                ) : (
+                  <>
+                    <button className="btn btn-primary" onClick={submitMappedData} disabled={mappingBusy}>Start Import</button>
+                    <button className="btn" style={{ marginLeft: 8 }} onClick={() => setImportData(null)}>Cancel</button>
+                  </>
+                )}
               </div>
             )}
           </div>
