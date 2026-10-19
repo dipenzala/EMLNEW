@@ -12,7 +12,6 @@ export default function CampaignDetail() {
   const [busy, setBusy] = useState(false);
   const [contactCount, setContactCount] = useState<number | null>(null);
   
-  // Upload State
   const [importData, setImportData] = useState<any[] | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapEmail, setMapEmail] = useState('');
@@ -42,7 +41,7 @@ export default function CampaignDetail() {
   useEffect(() => { 
     loadCampaign(); 
     loadLiveStats();
-    const t = setInterval(loadLiveStats, 5000); // Polling
+    const t = setInterval(loadLiveStats, 3000); 
     return () => clearInterval(t); 
   }, [id]);
 
@@ -61,7 +60,7 @@ export default function CampaignDetail() {
     const ok = await save();
     if (!ok) { push('Save failed before starting'); return; }
     const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'send_now' }) });
-    if (r.ok) { push('⚡ Bulk Sending Started!'); loadLiveStats(); }
+    if (r.ok) { push('⚡ Sending Started!'); loadLiveStats(); }
     else push('Failed to start');
   }
 
@@ -83,13 +82,18 @@ export default function CampaignDetail() {
         
         setHeaders(Object.keys(data[0] as object));
         setImportData(data);
+
+        // 🔥 AUTO-DETECT COLUMNS 🔥
         const keys = Object.keys(data[0] as object);
-        setMapEmail(keys.find(k => k.toLowerCase().includes('email')) || '');
-        setMapName(keys.find(k => k.toLowerCase().includes('name')) || '');
+        const autoEmail = keys.find(k => /email|mail/i.test(k));
+        const autoName = keys.find(k => /name|first/i.test(k));
         
-        push(`✅ File loaded: ${data.length} rows ready to import.`);
+        if (autoEmail) setMapEmail(autoEmail);
+        if (autoName) setMapName(autoName);
+        
+        push(`✅ File loaded: ${data.length} rows. Columns auto-detected.`);
       } catch (err: any) { 
-        push(err.message || 'Invalid file format. Please use CSV or Excel.');
+        push(err.message || 'Invalid file format.');
       } finally {
         setParsing(false);
       }
@@ -100,25 +104,19 @@ export default function CampaignDetail() {
   }
 
   async function submitMappedData() {
-    if (!importData || !mapEmail) { push('Select Email column'); return; }
+    if (!importData || !mapEmail) { push('Email column not detected.'); return; }
     setMappingBusy(true);
     setErrorMsg(null);
     
-    await save(); // Save HTML before importing
+    await save();
 
     const mapped = importData.map(r => ({ 
       email: String(r[mapEmail] || '').trim(), 
       first_name: mapName ? String(r[mapName] || '').trim() : undefined 
     })).filter(x => x.email.includes('@'));
 
-    if (mapped.length === 0) {
-      setErrorMsg('No valid emails found in selected column.');
-      setMappingBusy(false);
-      return;
-    }
-
     const CHUNK_SIZE = 2000;
-    let total = 0;
+    let finalTotalCount = 0;
 
     try {
       for (let i = 0; i < mapped.length; i += CHUNK_SIZE) {
@@ -134,15 +132,17 @@ export default function CampaignDetail() {
           const j = await r.json();
           throw new Error(j.error || 'Chunk failed');
         }
+        
         const j = await r.json();
-        total += (j.inserted || 0);
+        finalTotalCount = j.totalCount; // Update total count from backend
       }
       
-      push(`✅ Successfully imported ${total} contacts!`);
+      // Show success with TOTAL contacts, not just new ones
+      push(`✅ Processed ${mapped.length} rows. Total contacts now: ${finalTotalCount}`);
       setImportData(null); 
       loadLiveStats();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Import failed. Check connection or Database.');
+      setErrorMsg(err.message || 'Import failed.');
     } finally {
       setUploadProgress('');
       setMappingBusy(false);
@@ -187,7 +187,7 @@ export default function CampaignDetail() {
         </div>
 
         <div className="card">
-          <p className="card-title">Bulk Contacts ({contactCount || 0})</p>
+          <p className="card-title">Bulk Contacts ({contactCount !== null ? contactCount : 0})</p>
           
           {parsing ? (
             <div style={{ padding: 30, textAlign: 'center' }}>⏳ Reading file...</div>
@@ -200,13 +200,14 @@ export default function CampaignDetail() {
           ) : (
             <div style={{ padding: 16, background: '#f5f5f5', borderRadius: 8 }}>
               <h4>Preview ({importData.length} rows)</h4>
+              
               <div style={{ display: 'flex', gap: 10, margin: '10px 0' }}>
-                <select className="select" value={mapEmail} onChange={e => setMapEmail(e.target.value)}>
-                    <option value="">Email Col...</option>
+                <select className="select" value={mapEmail} onChange={e => setMapEmail(e.target.value)} style={{ background: mapEmail ? '#DCFCE7' : '#fff' }}>
+                    <option value="">Email Col (Not detected)</option>
                     {headers.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
                 <select className="select" value={mapName} onChange={e => setMapName(e.target.value)}>
-                    <option value="">Name Col (Opt)</option>
+                    <option value="">Name Col (Optional)</option>
                     {headers.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
               </div>
