@@ -22,64 +22,56 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'invalid input', issues: parsed.error.issues }, { status: 400 });
-  }
+  if (!parsed.success) return NextResponse.json({ error: 'invalid input' }, { status: 400 });
+  
   const { email, password, display_name, smtp_host, smtp_port, smtp_secure } = parsed.data;
 
-  // 1) Verify live SMTP connection before saving
   try {
-    await verifyHostingerSmtp({
-      host: smtp_host,
-      port: smtp_port,
-      secure: smtp_secure,
-      user: email,
-      pass: password,
-    });
+    await verifyHostingerSmtp({ host: smtp_host, port: smtp_port, secure: smtp_secure, user: email, pass: password });
   } catch (e) {
     logError('hostinger.verify_failed', e, { email });
     const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json(
-      { error: `SMTP verify failed: ${msg}. Check email, password, host (smtp.hostinger.com / smtp.titan.email), and that your Hostinger email plan is active.` },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: `SMTP verify failed: ${msg}` }, { status: 400 });
   }
 
   const admin = createSupabaseAdmin();
   const row = {
-    user_id: user.id,
-    provider: 'hostinger',
+    user_id: user.id, // Re-assign to the latest user who connected it
+    provider: 'hostinger', 
     google_email: email,
-    display_name: display_name || 'Startup India Certificate',
-    status: 'connected',
+    display_name: display_name || 'Startup India Certificate', 
+    status: 'connected', 
     paused: false,
-    smtp_host: smtp_host || 'smtp.hostinger.com',
+    smtp_host: smtp_host || 'smtp.hostinger.com', 
     smtp_port: smtp_port ?? 465,
-    smtp_secure: smtp_secure !== false,
+    smtp_secure: smtp_secure !== false, 
     smtp_user: email,
-    smtp_password_enc: encrypt(password),
+    smtp_password_enc: encrypt(password), 
     last_error: null,
     updated_at: new Date().toISOString(),
   };
 
+  // GLOBAL DUPLICATE CHECK (Check by email & provider, not user_id)
   const { data: existing } = await admin
     .from('sender_accounts')
     .select('id')
-    .eq('user_id', user.id)
     .eq('provider', 'hostinger')
     .eq('google_email', email)
     .maybeSingle();
 
   let senderId: string;
   if (existing) {
+    // If exists, update it (prevents duplicate)
     const { error } = await admin.from('sender_accounts').update(row).eq('id', existing.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     senderId = existing.id;
   } else {
+    // If not exists, insert new
     const { data, error } = await admin.from('sender_accounts').insert(row).select('id').single();
     if (error || !data) return NextResponse.json({ error: error?.message || 'insert failed' }, { status: 500 });
     senderId = data.id;
   }
+  
   log('hostinger.connected', { userId: user.id, senderId });
   return NextResponse.json({ ok: true, id: senderId });
 }
