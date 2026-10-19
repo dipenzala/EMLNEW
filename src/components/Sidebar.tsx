@@ -8,7 +8,6 @@ const items: Array<[string, string]> = [
   ['Senders', '/senders'],
   ['Contacts', '/contacts'],
   ['Campaigns', '/campaigns'],
-  ['Templates', '/templates'],
   ['Analytics', '/analytics'],
   ['Suppression', '/suppression'],
   ['Activity', '/activity'],
