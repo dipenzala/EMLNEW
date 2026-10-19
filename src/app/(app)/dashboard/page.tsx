@@ -14,7 +14,7 @@ export default function DashboardPage() {
       }).catch(() => setHistory([]));
     };
     load();
-    const t = setInterval(load, 3000); // Fast polling (3s) for real-time feel
+    const t = setInterval(load, 3000); // 3s polling
     return () => clearInterval(t);
   }, []);
 
@@ -84,11 +84,7 @@ export default function DashboardPage() {
           ) : (
             history.map((h) => {
               const time = h.created_at ? new Date(h.created_at).toLocaleTimeString() : 'Unknown Time';
-              let senderEmail = 'Unknown Sender';
-              if (h.sender_accounts) {
-                if (Array.isArray(h.sender_accounts)) senderEmail = h.sender_accounts[0]?.google_email || 'Unknown';
-                else senderEmail = h.sender_accounts.google_email || 'Unknown';
-              }
+              const senderEmail = h.sender_email || 'Unknown';
               const toEmail = h.to_email || 'Unknown Email';
               const status = h.status ? String(h.status).toUpperCase() : 'UNKNOWN';
               const isErr = status === 'FAILED' || status === 'UNCERTAIN';
