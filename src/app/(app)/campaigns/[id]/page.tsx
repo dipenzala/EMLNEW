@@ -9,6 +9,8 @@ export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>();
   const [c, setC] = useState<any>(null);
   const [progress, setProgress] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [contactCount, setContactCount] = useState<number | null>(null);
   
   // Contact Upload State
   const [importData, setImportData] = useState<any[] | null>(null);
@@ -22,34 +24,49 @@ export default function CampaignDetail() {
   const fileRef = useRef<HTMLInputElement>(null);
   const { push } = useToast();
 
-  async function load() {
-    const [cr, pr] = await Promise.all([
-      fetch(`/api/campaigns/${id}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
+  // Separate fetches so typing doesn't get overwritten
+  async function loadCampaign() {
+    const r = await fetch(`/api/campaigns/${id}`, { cache: 'no-store' });
+    if (r.ok) setC(await r.json());
+  }
+
+  async function loadLiveStats() {
+    const [pr, cc] = await Promise.all([
       fetch(`/api/campaigns/${id}/progress`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
+      fetch(`/api/contacts?campaign_id=${id}&count=1`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null)
     ]);
-    if (cr) setC(cr);
     if (pr) setProgress(pr);
+    if (cc && typeof cc.count === 'number') setContactCount(cc.count);
   }
 
   useEffect(() => { 
-    load(); 
-    const t = setInterval(load, 3000); // 3s Live Tracking
+    loadCampaign(); // Runs once
+    loadLiveStats();
+    const t = setInterval(loadLiveStats, 3000); // Only updates stats, not the text boxes!
     return () => clearInterval(t); 
   }, [id]);
 
   async function save() {
     if (!c) return false;
+    setBusy(true);
     const r = await fetch(`/api/campaigns/${id}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: c.name, subject: c.subject, html: c.html }),
     });
+    setBusy(false);
     return r.ok;
   }
 
+  async function saveOnly() {
+    const ok = await save();
+    push(ok ? 'Campaign Saved ✅' : 'Save failed');
+  }
+
   async function startCampaign() {
-    await save();
+    const ok = await save();
+    if (!ok) { push('Save failed before starting'); return; }
     const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'send_now' }) });
-    if (r.ok) { push('⚡ Bulk Sending Started!'); load(); }
+    if (r.ok) { push('⚡ Bulk Sending Started!'); loadLiveStats(); }
     else push('Failed to start');
   }
 
@@ -79,14 +96,14 @@ export default function CampaignDetail() {
     if (!importData || !mapEmail) { push('Select Email column'); return; }
     setMappingBusy(true);
     setErrorMsg(null);
-    await save(); // Save HTML before uploading
+    await save(); // Save current HTML before importing
 
     const mapped = importData.map(r => ({ 
       email: String(r[mapEmail] || '').trim(), 
       first_name: mapName ? String(r[mapName] || '').trim() : undefined 
     })).filter(x => x.email.includes('@'));
 
-    const CHUNK_SIZE = 2000; // Chunk 2000 emails per request
+    const CHUNK_SIZE = 2000;
     let total = 0;
 
     try {
@@ -107,7 +124,8 @@ export default function CampaignDetail() {
         total += (j.inserted || 0);
       }
       push(`✅ ${total} Contacts imported successfully!`);
-      setImportData(null); load();
+      setImportData(null); 
+      loadLiveStats();
     } catch (err: any) {
       setErrorMsg(err.message || 'Import failed. Check database SQL.');
     } finally {
@@ -123,18 +141,17 @@ export default function CampaignDetail() {
       <div className="topbar">
         <h1>{c.name}</h1>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn" onClick={async () => { await save(); push('Saved ✅'); }}>Save</button>
-          <button className="btn btn-primary" onClick={startCampaign}>⚡ Start Sending</button>
+          <button className="btn" onClick={saveOnly} disabled={busy}>Save</button>
+          <button className="btn btn-primary" onClick={startCampaign} disabled={busy}>⚡ Start Sending</button>
         </div>
       </div>
 
-      {/* LIVE TRACKING BOX */}
       {progress && progress.total > 0 && (
         <div className="card" style={{ marginBottom: 20, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
           <h3 style={{ margin: '0 0 10px', fontSize: 16 }}>📊 Live Campaign Tracking</h3>
           <div style={{ display: 'flex', gap: 30 }}>
-            <div><strong>Total:</strong> {progress.total}</div>
-            <div style={{ color: '#D97706' }}><strong>Queued:</strong> {progress.queued}</div>
+            <div><strong>Total Contacts:</strong> {progress.total}</div>
+            <div style={{ color: '#D97706' }}><strong>In Queue:</strong> {progress.queued}</div>
             <div style={{ color: '#16A34A' }}><strong>Sent:</strong> {progress.accepted}</div>
             <div style={{ color: '#DC2626' }}><strong>Failed:</strong> {progress.failed}</div>
           </div>
@@ -142,24 +159,28 @@ export default function CampaignDetail() {
       )}
 
       <div className="grid-2">
-        {/* COMPOSER (No Templates) */}
         <div className="card">
-          <p className="card-title">Compose Email (Direct HTML)</p>
-          <div className="field"><label>Subject</label><input className="input" value={c.subject || ''} onChange={(e) => setC({ ...c, subject: e.target.value })} /></div>
+          <p className="card-title">Compose Email (HTML)</p>
+          <div className="field">
+            <label>Campaign Name</label>
+            <input className="input" value={c.name || ''} onChange={(e) => setC({ ...c, name: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>Subject</label>
+            <input className="input" value={c.subject || ''} onChange={(e) => setC({ ...c, subject: e.target.value })} />
+          </div>
           <div className="field">
             <label>HTML Body</label>
             <textarea className="textarea" style={{ minHeight: 300 }} value={c.html || ''} onChange={(e) => setC({ ...c, html: e.target.value })} placeholder="<p>Hi {{first_name}},</p>" />
           </div>
         </div>
 
-        {/* CONTACTS BULK UPLOAD */}
         <div className="card">
-          <p className="card-title">Bulk Contacts (Excel/CSV)</p>
-          
+          <p className="card-title">Bulk Contacts ({contactCount || 0})</p>
           {!importData ? (
             <div style={{ padding: 30, textAlign: 'center', border: '2px dashed #ccc', borderRadius: 8 }}>
               <p style={{ color: '#666', marginBottom: 15 }}>Upload up to 1 Lakh+ contacts</p>
-              <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Select File</button>
+              <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Select Excel/CSV</button>
               <input ref={fileRef} type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} onChange={handleFile} />
             </div>
           ) : (
