@@ -56,6 +56,14 @@ export default function CampaignDetail() {
     return r.ok;
   }
 
+  async function processManualQueue() {
+    setBusy(true);
+    await fetch('/api/process-batch', { method: 'POST' });
+    setBusy(false);
+    push('⚡ Batch Processed! Check progress.');
+    loadLiveStats();
+  }
+
   async function startCampaign() {
     const ok = await save();
     if (!ok) { push('Save failed before starting'); return; }
@@ -158,6 +166,9 @@ export default function CampaignDetail() {
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn" onClick={async () => { if(await save()) push('Saved ✅'); }} disabled={busy}>Save</button>
           <button className="btn btn-primary" onClick={startCampaign} disabled={busy}>⚡ Start Sending</button>
+          {progress?.queued > 0 && (
+            <button className="btn" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={processManualQueue} disabled={busy}>▶ Process 50 Emails</button>
+          )}
         </div>
       </div>
 
