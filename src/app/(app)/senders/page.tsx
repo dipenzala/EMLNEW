@@ -6,6 +6,7 @@ import { useToast } from '@/components/Toast';
 export default function SendersPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [showHostinger, setShowHostinger] = useState(false);
   const [hEmail, setHEmail] = useState('');
   const [hPass, setHPass] = useState('');
@@ -54,6 +55,12 @@ export default function SendersPage() {
 
   if (loading) return <div className="skeleton" style={{ height: 200 }} />;
 
+  // Filter senders based on search
+  const filteredSenders = data?.senders.filter((s: any) => 
+    s.google_email.toLowerCase().includes(search.toLowerCase()) || 
+    s.provider.toLowerCase().includes(search.toLowerCase())
+  ) || [];
+
   return (
     <>
       <div className="topbar">
@@ -95,6 +102,16 @@ export default function SendersPage() {
         </form>
       )}
 
+      {/* Search Bar for 100+ Senders */}
+      <div className="card" style={{ marginBottom: 16, padding: 12 }}>
+        <input 
+          className="input" 
+          placeholder="Search by email or provider (e.g., gmail, hostinger)..." 
+          value={search} 
+          onChange={(e) => setSearch(e.target.value)} 
+        />
+      </div>
+
       {/* SENDERS TABLE */}
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
         <table className="table" style={{ minWidth: 900 }}>
@@ -110,7 +127,7 @@ export default function SendersPage() {
             </tr>
           </thead>
           <tbody>
-            {data?.senders.map((s: any) => {
+            {filteredSenders.map((s: any) => {
               const isActive = s.status === 'connected' && !s.paused;
               return (
                 <tr key={s.id}>
@@ -123,9 +140,7 @@ export default function SendersPage() {
                       {s.paused ? 'Paused' : s.status}
                     </span>
                   </td>
-                  <td>
-                    <strong>{s.stats.today}</strong> / {s.daily_cap}
-                  </td>
+                  <td><strong>{s.stats.today}</strong> / {s.daily_cap}</td>
                   <td>{s.stats.week}</td>
                   <td>{s.stats.month}</td>
                   <td><strong>{s.stats.total}</strong></td>
@@ -136,8 +151,8 @@ export default function SendersPage() {
                 </tr>
               );
             })}
-            {data?.senders.length === 0 && (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40 }}>No senders connected yet.</td></tr>
+            {filteredSenders.length === 0 && (
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40 }}>No senders found.</td></tr>
             )}
           </tbody>
         </table>
