@@ -12,19 +12,19 @@ export default function CampaignDetail() {
   const [busy, setBusy] = useState(false);
   const [contactCount, setContactCount] = useState<number | null>(null);
   
-  // Contact Upload State
+  // Upload State
   const [importData, setImportData] = useState<any[] | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapEmail, setMapEmail] = useState('');
   const [mapName, setMapName] = useState('');
   const [mappingBusy, setMappingBusy] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   const fileRef = useRef<HTMLInputElement>(null);
   const { push } = useToast();
 
-  // Separate fetches so typing doesn't get overwritten
   async function loadCampaign() {
     const r = await fetch(`/api/campaigns/${id}`, { cache: 'no-store' });
     if (r.ok) setC(await r.json());
@@ -40,9 +40,9 @@ export default function CampaignDetail() {
   }
 
   useEffect(() => { 
-    loadCampaign(); // Runs once
+    loadCampaign(); 
     loadLiveStats();
-    const t = setInterval(loadLiveStats, 3000); // Only updates stats, not the text boxes!
+    const t = setInterval(loadLiveStats, 5000); // Polling
     return () => clearInterval(t); 
   }, [id]);
 
@@ -57,11 +57,6 @@ export default function CampaignDetail() {
     return r.ok;
   }
 
-  async function saveOnly() {
-    const ok = await save();
-    push(ok ? 'Campaign Saved ✅' : 'Save failed');
-  }
-
   async function startCampaign() {
     const ok = await save();
     if (!ok) { push('Save failed before starting'); return; }
@@ -73,21 +68,33 @@ export default function CampaignDetail() {
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    setParsing(true);
+    setErrorMsg(null);
+    
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
         const wb = XLSX.read(evt.target?.result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        if (data.length === 0) throw new Error('Empty file');
+        
+        if (data.length === 0) throw new Error('File is empty.');
+        
         setHeaders(Object.keys(data[0] as object));
         setImportData(data);
         const keys = Object.keys(data[0] as object);
         setMapEmail(keys.find(k => k.toLowerCase().includes('email')) || '');
         setMapName(keys.find(k => k.toLowerCase().includes('name')) || '');
-        setErrorMsg(null);
-      } catch (err) { push('Invalid file format.'); }
+        
+        push(`✅ File loaded: ${data.length} rows ready to import.`);
+      } catch (err: any) { 
+        push(err.message || 'Invalid file format. Please use CSV or Excel.');
+      } finally {
+        setParsing(false);
+      }
     };
+    reader.onerror = () => { push('Error reading file.'); setParsing(false); };
     reader.readAsBinaryString(file);
     if (fileRef.current) fileRef.current.value = '';
   }
@@ -96,12 +103,19 @@ export default function CampaignDetail() {
     if (!importData || !mapEmail) { push('Select Email column'); return; }
     setMappingBusy(true);
     setErrorMsg(null);
-    await save(); // Save current HTML before importing
+    
+    await save(); // Save HTML before importing
 
     const mapped = importData.map(r => ({ 
       email: String(r[mapEmail] || '').trim(), 
       first_name: mapName ? String(r[mapName] || '').trim() : undefined 
     })).filter(x => x.email.includes('@'));
+
+    if (mapped.length === 0) {
+      setErrorMsg('No valid emails found in selected column.');
+      setMappingBusy(false);
+      return;
+    }
 
     const CHUNK_SIZE = 2000;
     let total = 0;
@@ -109,7 +123,7 @@ export default function CampaignDetail() {
     try {
       for (let i = 0; i < mapped.length; i += CHUNK_SIZE) {
         const chunk = mapped.slice(i, i + CHUNK_SIZE);
-        setUploadProgress(`Uploading ${Math.min(i + CHUNK_SIZE, mapped.length)} / ${mapped.length}...`);
+        setUploadProgress(`Importing ${Math.min(i + CHUNK_SIZE, mapped.length)} / ${mapped.length}...`);
 
         const r = await fetch(`/api/campaigns/${id}/contacts`, { 
           method: 'POST', headers: { 'content-type': 'application/json' }, 
@@ -123,11 +137,12 @@ export default function CampaignDetail() {
         const j = await r.json();
         total += (j.inserted || 0);
       }
-      push(`✅ ${total} Contacts imported successfully!`);
+      
+      push(`✅ Successfully imported ${total} contacts!`);
       setImportData(null); 
       loadLiveStats();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Import failed. Check database SQL.');
+      setErrorMsg(err.message || 'Import failed. Check connection or Database.');
     } finally {
       setUploadProgress('');
       setMappingBusy(false);
@@ -141,7 +156,7 @@ export default function CampaignDetail() {
       <div className="topbar">
         <h1>{c.name}</h1>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn" onClick={saveOnly} disabled={busy}>Save</button>
+          <button className="btn" onClick={async () => { if(await save()) push('Saved ✅'); }} disabled={busy}>Save</button>
           <button className="btn btn-primary" onClick={startCampaign} disabled={busy}>⚡ Start Sending</button>
         </div>
       </div>
@@ -162,10 +177,6 @@ export default function CampaignDetail() {
         <div className="card">
           <p className="card-title">Compose Email (HTML)</p>
           <div className="field">
-            <label>Campaign Name</label>
-            <input className="input" value={c.name || ''} onChange={(e) => setC({ ...c, name: e.target.value })} />
-          </div>
-          <div className="field">
             <label>Subject</label>
             <input className="input" value={c.subject || ''} onChange={(e) => setC({ ...c, subject: e.target.value })} />
           </div>
@@ -177,7 +188,10 @@ export default function CampaignDetail() {
 
         <div className="card">
           <p className="card-title">Bulk Contacts ({contactCount || 0})</p>
-          {!importData ? (
+          
+          {parsing ? (
+            <div style={{ padding: 30, textAlign: 'center' }}>⏳ Reading file...</div>
+          ) : !importData ? (
             <div style={{ padding: 30, textAlign: 'center', border: '2px dashed #ccc', borderRadius: 8 }}>
               <p style={{ color: '#666', marginBottom: 15 }}>Upload up to 1 Lakh+ contacts</p>
               <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Select Excel/CSV</button>
@@ -200,10 +214,14 @@ export default function CampaignDetail() {
               {errorMsg && <div style={{ color: 'red', fontSize: 13, marginBottom: 10, background: '#FEE2E2', padding: 10, borderRadius: 6 }}>{errorMsg}</div>}
               
               {uploadProgress ? (
-                <div style={{ padding: 12, background: '#DBEAFE', color: '#1E40AF', borderRadius: 8, fontWeight: 'bold' }}>⏳ {uploadProgress}</div>
+                <div style={{ padding: 12, background: '#DBEAFE', color: '#1E40AF', borderRadius: 8, fontWeight: 'bold' }}>
+                  ⏳ {uploadProgress}
+                </div>
               ) : (
                 <>
-                  <button className="btn btn-primary" onClick={submitMappedData} disabled={mappingBusy}>Start Import</button>
+                  <button className="btn btn-primary" onClick={submitMappedData} disabled={mappingBusy}>
+                    {mappingBusy ? 'Importing...' : `Import ${importData.length} Contacts`}
+                  </button>
                   <button className="btn" style={{ marginLeft: 8 }} onClick={() => setImportData(null)}>Cancel</button>
                 </>
               )}

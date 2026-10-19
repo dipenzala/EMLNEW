@@ -16,37 +16,45 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: 'No contacts provided' }, { status: 400 });
     }
 
-    // Filter valid emails and remove duplicates within the chunk
+    // Filter and deduplicate
     const unique = new Map();
     contacts.forEach(c => {
       const e = String(c.email || '').trim().toLowerCase();
-      if (e.includes('@')) {
-        unique.set(e, { 
-          email: e, 
-          first_name: c.first_name ? String(c.first_name).trim() : null 
-        });
-      }
+      if (e.includes('@')) unique.set(e, { email: e, first_name: c.first_name || null });
     });
 
     const valid = Array.from(unique.values());
     let inserted = 0;
 
-    // Insert in batches of 500 using RPC
     for (let i = 0; i < valid.length; i += 500) {
       const chunk = valid.slice(i, i + 500);
       
-      // Call the database function we created in SQL
-      const { data: count, error } = await admin.rpc('bulk_upsert_campaign_contacts', {
+      // Attempt 1: Use RPC (if user ran the SQL function)
+      const { data: rpcCount, error: rpcError } = await admin.rpc('bulk_upsert_campaign_contacts', {
         p_user_id: user.id,
         p_campaign_id: params.id,
         p_contacts: chunk
       });
       
-      if (error) {
-        console.error("DB Insert Error:", error.message);
-        return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 });
+      if (!rpcError) {
+        inserted += (rpcCount || 0);
+        continue;
       }
       
+      // Attempt 2: Standard upsert (if RPC doesn't exist but index does)
+      const { error: upsertError, count } = await admin
+        .from('contacts')
+        .upsert(
+          chunk.map(c => ({ ...c, user_id: user.id, campaign_id: params.id })), 
+          { onConflict: 'campaign_id,email', ignoreDuplicates: true, count: 'exact' }
+        );
+        
+      if (upsertError) {
+        console.error("DB Error:", upsertError.message);
+        return NextResponse.json({ 
+          error: `Database error: ${upsertError.message}. Please run the SQL fix in Supabase (create unique index).` 
+        }, { status: 500 });
+      }
       inserted += (count || 0);
     }
     
