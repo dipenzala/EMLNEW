@@ -20,7 +20,6 @@ export default function CampaignDetail() {
   const [mappingBusy, setMappingBusy] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   const fileRef = useRef<HTMLInputElement>(null);
   const { push } = useToast();
@@ -42,7 +41,7 @@ export default function CampaignDetail() {
   useEffect(() => { 
     loadCampaign(); 
     loadLiveStats();
-    const t = setInterval(loadLiveStats, 3000); 
+    const t = setInterval(loadLiveStats, 4000); 
     return () => clearInterval(t); 
   }, [id]);
 
@@ -57,43 +56,48 @@ export default function CampaignDetail() {
     return r.ok;
   }
 
-  async function startCampaign() {
-    const ok = await save();
-    if (!ok) { push('Save failed'); return; }
-    const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'send_now' }) });
-    if (r.ok) { push('⚡ Started!'); loadLiveStats(); } else push('Failed');
-  }
-
-  async function stopCampaign() {
-    if (!confirm('Are you sure you want to stop this campaign? All queued emails will be cancelled.')) return;
+  // 🔥 FORCE QUEUE ALL CONTACTS
+  async function forceQueue() {
     setBusy(true);
-    const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
+    push('⏳ Queuing all 17k+ contacts...');
+    const r = await fetch(`/api/campaigns/${id}/force-queue`, { method: 'POST' });
+    const j = await r.json();
     setBusy(false);
-    if (r.ok) { push('Campaign Stopped 🛑'); loadCampaign(); loadLiveStats(); }
-    else push('Failed to stop');
+    if (r.ok) { push(`✅ ${j.totalEnqueued} contacts queued!`); loadLiveStats(); }
+    else push(j.error || 'Force queue failed');
   }
 
-  async function deleteCampaign() {
-    if (!confirm('🚨 Are you sure you want to DELETE this campaign? This cannot be undone.')) return;
-    setBusy(true);
-    const r = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
-    setBusy(false);
-    if (r.ok) { push('Campaign Deleted'); router.push('/campaigns'); }
-    else push('Failed to delete');
-  }
-
+  // 🔥 PROCESS BATCH (AUTO-SEND)
   async function processManualQueue() {
     setBusy(true);
     await fetch('/api/process-batch', { method: 'POST' });
     setBusy(false);
-    push('⚡ Batch Processed!');
+    push('⚡ Sending started in background!');
     loadLiveStats();
+  }
+
+  // 🛑 STOP CAMPAIGN
+  async function stopCampaign() {
+    if (!confirm('Are you sure you want to stop? All queued emails will be cancelled.')) return;
+    setBusy(true);
+    const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
+    setBusy(false);
+    if (r.ok) { push('Campaign Stopped 🛑'); loadCampaign(); loadLiveStats(); }
+  }
+
+  // 🗑 DELETE CAMPAIGN
+  async function deleteCampaign() {
+    if (!confirm('🚨 DELETE this campaign?')) return;
+    setBusy(true);
+    const r = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
+    setBusy(false);
+    if (r.ok) { push('Deleted'); router.push('/campaigns'); }
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setParsing(true); setErrorMsg(null);
+    setParsing(true);
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
@@ -106,7 +110,6 @@ export default function CampaignDetail() {
         const keys = Object.keys(data[0] as object);
         setMapEmail(keys.find(k => /email|mail/i.test(k)) || '');
         setMapName(keys.find(k => /name|first/i.test(k)) || '');
-        push(`✅ ${data.length} rows loaded.`);
       } catch (err: any) { push(err.message || 'Invalid file.'); }
       finally { setParsing(false); }
     };
@@ -116,23 +119,22 @@ export default function CampaignDetail() {
 
   async function submitMappedData() {
     if (!importData || !mapEmail) { push('Email column not detected.'); return; }
-    setMappingBusy(true); setErrorMsg(null);
+    setMappingBusy(true);
     await save();
     const mapped = importData.map(r => ({ email: String(r[mapEmail] || '').trim(), first_name: mapName ? String(r[mapName] || '').trim() : undefined })).filter(x => x.email.includes('@'));
-    const CHUNK_SIZE = 2000;
     let total = 0;
     try {
-      for (let i = 0; i < mapped.length; i += CHUNK_SIZE) {
-        const chunk = mapped.slice(i, i + CHUNK_SIZE);
-        setUploadProgress(`Importing ${Math.min(i + CHUNK_SIZE, mapped.length)} / ${mapped.length}...`);
+      for (let i = 0; i < mapped.length; i += 2000) {
+        const chunk = mapped.slice(i, i + 2000);
+        setUploadProgress(`Importing ${Math.min(i + 2000, mapped.length)} / ${mapped.length}...`);
         const r = await fetch(`/api/campaigns/${id}/contacts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contacts: chunk }) });
-        if (!r.ok) { const j = await r.json(); throw new Error(j.error || 'Chunk failed'); }
+        if (!r.ok) throw new Error('Chunk failed');
         const j = await r.json();
         total += (j.inserted || 0);
       }
       push(`✅ ${total} new contacts imported!`);
       setImportData(null); loadLiveStats();
-    } catch (err: any) { setErrorMsg(err.message || 'Import failed.'); }
+    } catch (err: any) { push(err.message || 'Import failed.'); }
     finally { setUploadProgress(''); setMappingBusy(false); }
   }
 
@@ -140,15 +142,24 @@ export default function CampaignDetail() {
 
   return (
     <div>
-      <div className="topbar">
+      <div className="topbar" style={{ flexWrap: 'wrap', gap: 10 }}>
         <h1>{c.name} {c.status === 'running' && <span className="badge badge-ok" style={{marginLeft:10}}>Running</span>}</h1>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button className="btn" onClick={async () => { if(await save()) push('Saved ✅'); }} disabled={busy}>Save</button>
-          <button className="btn btn-primary" onClick={startCampaign} disabled={busy || c.status === 'running'}>⚡ Start</button>
+          
+          {/* 🔥 FORCE QUEUE BUTTON (Top) */}
+          <button className="btn" style={{ background: '#DBEAFE', color: '#1E40AF', fontWeight: 'bold' }} onClick={forceQueue} disabled={busy}>
+            📥 Force Queue All
+          </button>
+          
+          {/* 🔥 AUTO SEND BUTTON (Top) */}
           {progress?.queued > 0 && (
-            <button className="btn" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 'bold' }} onClick={processManualQueue} disabled={busy}>▶ Auto-Send Active</button>
+            <button className="btn" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 'bold' }} onClick={processManualQueue} disabled={busy}>
+              ▶ Auto-Send
+            </button>
           )}
-          <button className="btn" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={stopCampaign} disabled={busy || c.status !== 'running'}>🛑 Stop</button>
+
+          <button className="btn" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={stopCampaign} disabled={busy}>🛑 Stop</button>
           <button className="btn btn-danger" onClick={deleteCampaign} disabled={busy}>🗑 Delete</button>
         </div>
       </div>
@@ -156,12 +167,11 @@ export default function CampaignDetail() {
       {progress && (
         <div className="card" style={{ marginBottom: 20, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
           <h3 style={{ margin: '0 0 10px', fontSize: 16 }}>📊 Live Campaign Tracking</h3>
-          <div style={{ display: 'flex', gap: 30, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 30 }}>
             <div><strong>Total Uploaded:</strong> {contactCount || 0}</div>
             <div style={{ color: '#D97706' }}><strong>In Queue:</strong> {progress.queued}</div>
             <div style={{ color: '#16A34A' }}><strong>Sent:</strong> {progress.accepted}</div>
             <div style={{ color: '#DC2626' }}><strong>Failed:</strong> {progress.failed}</div>
-
           </div>
         </div>
       )}
@@ -169,18 +179,8 @@ export default function CampaignDetail() {
       <div className="grid-2">
         <div className="card">
           <p className="card-title">Compose Email (HTML)</p>
-          <div className="field">
-            <label>Campaign Name</label>
-            <input className="input" value={c.name || ''} onChange={(e) => setC({ ...c, name: e.target.value })} />
-          </div>
-          <div className="field">
-            <label>Subject</label>
-            <input className="input" value={c.subject || ''} onChange={(e) => setC({ ...c, subject: e.target.value })} />
-          </div>
-          <div className="field">
-            <label>HTML Body</label>
-            <textarea className="textarea" style={{ minHeight: 300 }} value={c.html || ''} onChange={(e) => setC({ ...c, html: e.target.value })} placeholder="<p>Hi {{first_name}},</p>" />
-          </div>
+          <div className="field"><label>Subject</label><input className="input" value={c.subject || ''} onChange={(e) => setC({ ...c, subject: e.target.value })} /></div>
+          <div className="field"><label>HTML Body</label><textarea className="textarea" style={{ minHeight: 300 }} value={c.html || ''} onChange={(e) => setC({ ...c, html: e.target.value })} placeholder="<p>Hi {{first_name}},</p>" /></div>
         </div>
 
         <div className="card">
@@ -206,7 +206,6 @@ export default function CampaignDetail() {
                     {headers.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
               </div>
-              {errorMsg && <div style={{ color: 'red', fontSize: 13, marginBottom: 10, background: '#FEE2E2', padding: 10, borderRadius: 6 }}>{errorMsg}</div>}
               {uploadProgress ? (
                 <div style={{ padding: 12, background: '#DBEAFE', color: '#1E40AF', borderRadius: 8, fontWeight: 'bold' }}>⏳ {uploadProgress}</div>
               ) : (
