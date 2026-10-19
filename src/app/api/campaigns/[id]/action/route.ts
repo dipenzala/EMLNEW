@@ -58,6 +58,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (!senders || senders.length === 0) return NextResponse.json({ error: 'No connected sender.' }, { status: 400 });
     const admin = createSupabaseAdmin();
     await admin.from('campaigns').update({ status: 'running' }).eq('id', c.id).eq('user_id', user.id);
+    // Clear old queued jobs so we can start fresh with all contacts
+    await admin.from('email_jobs').delete().eq('campaign_id', c.id).eq('status', 'queued');
+    
     const enqueued = await enqueueCampaignJobs(c.id);
     if (enqueued === 0) return NextResponse.json({ ok: true, enqueued: 0, note: 'No contacts.' });
     

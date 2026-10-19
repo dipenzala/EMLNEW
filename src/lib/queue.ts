@@ -122,40 +122,14 @@ export async function enqueueCampaignJobs(campaignId: string): Promise<number> {
   const admin = createSupabaseAdmin();
   const { data: campaign } = await admin.from('campaigns').select('*').eq('id', campaignId).single();
   if (!campaign) throw new Error('campaign not found');
-  
-  let allContacts: any[] = [];
-  let page = 0;
-  const pageSize = 1000;
-  
-  while (true) {
-    const { data: contacts } = await admin.from('contacts')
-      .select('id,email,unsubscribed')
-      .eq('campaign_id', campaignId)
-      .eq('unsubscribed', false)
-      .range(page * pageSize, (page + 1) * pageSize - 1);
-      
-    if (!contacts || contacts.length === 0) break;
-    allContacts = [...allContacts, ...contacts];
-    page++;
-  }
 
-  if (allContacts.length === 0) return 0;
-  
-  const rows = allContacts.map((c: any) => ({ 
-    campaign_id: campaignId, 
-    user_id: campaign.user_id, 
-    contact_id: c.id, 
-    sender_account_id: campaign.sender_account_id, 
-    to_email: c.email, 
-    status: 'queued' 
-  }));
-  
-  let inserted = 0;
-  for (let i = 0; i < rows.length; i += 500) {
-    const chunk = rows.slice(i, i + 500);
-    const { error, count } = await admin.from('email_jobs').upsert(chunk, { onConflict: 'campaign_id,contact_id', ignoreDuplicates: true, count: 'exact' });
-    if (error) throw error; 
-    inserted += count ?? 0;
-  }
-  return inserted;
+  // Use the RPC function to enqueue directly in Database (No Vercel Timeout)
+  const { data: count, error } = await admin.rpc('enqueue_campaign_jobs_bulk', {
+    p_campaign_id: campaignId,
+    p_user_id: campaign.user_id,
+    p_sender_id: campaign.sender_account_id || null,
+  });
+
+  if (error) throw error;
+  return count || 0;
 }
