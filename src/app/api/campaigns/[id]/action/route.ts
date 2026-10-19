@@ -2,10 +2,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUser } from '@/lib/auth';
 import { createSupabaseServer, createSupabaseAdmin } from '@/lib/supabase/server';
-import { processBatch } from '@/lib/queue';
-import { log, logError } from '@/lib/logger';
+import { log } from '@/lib/logger';
 
-const schema = z.object({ action: z.enum(['send_now']) });
+const schema = z.object({ action: z.enum(['send_now', 'stop']) });
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const user = await requireUser();
@@ -19,41 +18,32 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!c) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
   if (parsed.data.action === 'send_now') {
-    if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') {
-      return NextResponse.json({ error: 'Global sending is disabled.' }, { status: 400 });
-    }
+    if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') return NextResponse.json({ error: 'Global sending disabled.' }, { status: 400 });
+    await admin.from('campaigns').update({ status: 'running' }).eq('id', c.id);
     
-    const { data: senders } = await sb.from('sender_accounts').select('id').eq('status', 'connected').eq('paused', false);
-    if (!senders || senders.length === 0) return NextResponse.json({ error: 'No connected sender.' }, { status: 400 });
-    
-    await admin.from('campaigns').update({ status: 'running' }).eq('id', c.id).eq('user_id', user.id);
-    
-    // 🔥 USE RPC TO ENQUEUE ALL CONTACTS (Bypasses Vercel 1000 limit)
+    // Enqueue via RPC
     const { data: enqueued, error: rpcError } = await admin.rpc('enqueue_campaign_jobs_bulk', {
-      p_campaign_id: c.id,
-      p_user_id: user.id,
-      p_sender_id: c.sender_account_id || null
+      p_campaign_id: c.id, p_user_id: user.id, p_sender_id: c.sender_account_id || null
     });
+    if (rpcError) return NextResponse.json({ error: rpcError.message }, { status: 500 });
 
-    if (rpcError) {
-      logError('campaign.enqueue_rpc_failed', rpcError);
-      return NextResponse.json({ error: rpcError.message }, { status: 500 });
-    }
-
-    log('campaign.send_now', { userId: user.id, campaignId: c.id, enqueued });
-    
-    // Trigger the drain chain in background
+    // Trigger drain
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     const secret = process.env.CRON_SECRET;
     if (appUrl && secret) {
-      fetch(`${appUrl}/api/drain`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
-        body: JSON.stringify({ userId: user.id, depth: 0 }),
-      }).catch(() => {});
+      fetch(`${appUrl}/api/drain`, { method: 'POST', headers: { authorization: `Bearer ${secret}` }, body: JSON.stringify({ userId: user.id }) }).catch(() => {});
     }
+    return NextResponse.json({ ok: true, enqueued });
+  }
+
+  if (parsed.data.action === 'stop') {
+    // 1. Mark campaign as paused
+    await admin.from('campaigns').update({ status: 'paused' }).eq('id', c.id);
+    // 2. Cancel all pending jobs for this campaign
+    await admin.from('email_jobs').update({ status: 'cancelled' }).eq('campaign_id', c.id).eq('status', 'queued');
     
-    return NextResponse.json({ ok: true, enqueued: enqueued || 0 });
+    log('campaign.stopped', { userId: user.id, campaignId: c.id });
+    return NextResponse.json({ ok: true });
   }
   
   return NextResponse.json({ error: 'unsupported' }, { status: 400 });

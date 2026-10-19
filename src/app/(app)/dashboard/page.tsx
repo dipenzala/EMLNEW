@@ -92,6 +92,7 @@ export default function DashboardPage() {
               return (
                 <div key={h.id} style={{ marginBottom: 4 }}>
                   <span style={{ color: '#888' }}>[{time}]</span>{' '}
+                  <span style={{ color: '#eab308' }}>[{h.campaign_name}]</span>{' '}
                   <span style={{ color: '#00bfff' }}>{senderEmail}</span>{' '}
                   <span style={{ color: '#00ff00' }}>-&gt; {toEmail}</span>{' '}
                   <span style={{ color: isErr ? '#ff4444' : '#00ff00' }}>[{status}]</span>
