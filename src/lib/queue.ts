@@ -1,7 +1,6 @@
 import { createSupabaseAdmin } from './supabase/server';
 import { sendViaSender } from './mailer';
 import { renderTemplate, sanitizeUserHtml, toPlainText } from './template';
-import { logError } from './logger';
 import { randomToken } from './crypto';
 
 export type ProcessResult = { claimed: number; sent: number; skipped: number; failed: number; uncertain: number };
@@ -92,11 +91,6 @@ async function processOne(admin: any, job: any): Promise<'sent' | 'failed' | 'sk
   const pixel = `<img src="${process.env.NEXT_PUBLIC_APP_URL || ''}/api/track/open/${jobId}" width="1" height="1" style="display:none;" />`;
   html = html.includes('</body>') ? html.replace('</body>', `${pixel}</body>`) : html + pixel;
 
-  html = html.replace(/<a\s+(?:[^>]*?\s+)?href=(["'])(.*?)\1/gi, (match, quote, url) => {
-    if (url.startsWith('mailto:') || url.startsWith('#') || url.startsWith('tel:')) return match;
-    return `<a href="${process.env.NEXT_PUBLIC_APP_URL}/api/track/click/${jobId}?url=${encodeURIComponent(url)}"`;
-  });
-
   const from = `Startup India Certificate <${sender.google_email}>`;
   try {
     const messageId = await Promise.race([
@@ -117,13 +111,12 @@ async function processOne(admin: any, job: any): Promise<'sent' | 'failed' | 'sk
   }
 }
 
-// 🔥 FIX: Fetch ALL contacts in chunks of 1000 to bypass Supabase limit
 export async function enqueueCampaignJobs(campaignId: string): Promise<number> {
   const admin = createSupabaseAdmin();
   const { data: campaign } = await admin.from('campaigns').select('*').eq('id', campaignId).single();
   if (!campaign) throw new Error('campaign not found');
 
-  // Use the RPC function to enqueue directly in Database (No Vercel Timeout)
+  // FORCE USE RPC (Bypass Vercel Timeout)
   const { data: count, error } = await admin.rpc('enqueue_campaign_jobs_bulk', {
     p_campaign_id: campaignId,
     p_user_id: campaign.user_id,
