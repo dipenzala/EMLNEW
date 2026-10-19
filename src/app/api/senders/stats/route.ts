@@ -4,7 +4,7 @@ import { createSupabaseAdmin } from '@/lib/supabase/server';
 import { startOfDay, startOfWeek, startOfMonth } from 'date-fns';
 
 export async function GET() {
-  const user = await requireUser();
+  await requireUser();
   const admin = createSupabaseAdmin();
 
   const now = new Date();
@@ -12,28 +12,22 @@ export async function GET() {
   const startWeek = startOfWeek(now).toISOString();
   const startMonth = startOfMonth(now).toISOString();
 
-  // Fetch ALL senders (limit increased to 1000 for bulk users)
+  // 1. Fetch ALL senders (Shared Pool)
   const { data: senders, error: sErr } = await admin
     .from('sender_accounts')
     .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(1000); // <--- Yahan limit badha di hai
+    .order('created_at', { ascending: false });
 
   if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
 
-  // Fetch all accepted jobs
+  // 2. Fetch ALL accepted jobs (to calculate true usage per sender)
   const { data: jobs } = await admin
     .from('email_jobs')
     .select('sender_account_id, accepted_at')
-    .eq('user_id', user.id)
     .eq('status', 'accepted');
 
   const statsMap: Record<string, { total: number, today: number, week: number, month: number }> = {};
-  
-  senders?.forEach(s => {
-    statsMap[s.id] = { total: 0, today: 0, week: 0, month: 0 };
-  });
+  senders?.forEach(s => { statsMap[s.id] = { total: 0, today: 0, week: 0, month: 0 }; });
 
   jobs?.forEach(j => {
     if (!j.sender_account_id || !j.accepted_at) return;

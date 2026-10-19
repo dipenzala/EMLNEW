@@ -17,12 +17,19 @@ function WelcomeInner() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [showAddMore, setShowAddMore] = useState(false);
+  const [senders, setSenders] = useState<any[]>([]);
+
+  async function loadSenders() {
+    const r = await fetch('/api/senders');
+    if (r.ok) setSenders(await r.json());
+  }
 
   useEffect(() => {
     const sb = createSupabaseBrowser();
     sb.auth.getUser().then(({ data }) => {
       setAnonymous(!!(data.user as any)?.is_anonymous);
     });
+    loadSenders();
   }, []);
 
   async function saveAccount(e: React.FormEvent) {
@@ -50,51 +57,32 @@ function WelcomeInner() {
   return (
     <div className="wp-shell">
       <style>{`
-        .wp-shell {
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-          background: #F2F3F4;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        }
-        .wp-card {
-          background: #fff;
-          border-radius: 20px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-          padding: 32px 24px;
-          max-width: 480px;
-          width: 100%;
-        }
+        .wp-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; background: #F2F3F4; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .wp-card { background: #fff; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); padding: 32px 24px; max-width: 500px; width: 100%; }
         .wp-icon { display: flex; justify-content: center; margin-bottom: 20px; }
         .wp-title { font-size: 24px; font-weight: 800; margin: 0 0 8px; text-align: center; color: #0F172A; }
         .wp-sub { color: #64748B; font-size: 15px; margin: 0 0 24px; text-align: center; line-height: 1.5; }
-        
         .wp-actions { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
         @media(min-width: 480px) { .wp-actions { flex-direction: row; } }
-        
         .wp-btn { width: 100%; padding: 12px 16px; border-radius: 10px; font-weight: 600; font-size: 15px; text-align: center; border: 1px solid transparent; cursor: pointer; transition: 0.2s; display: inline-flex; justify-content: center; align-items: center; gap: 8px; text-decoration: none; }
         .wp-btn-primary { background: #1C83F3; color: #fff; }
         .wp-btn-primary:hover { background: #1657B8; }
         .wp-btn-outline { background: transparent; color: #0F172A; border-color: #E2E8F0; }
         .wp-btn-outline:hover { background: #F8FAFC; border-color: #CBD5E1; }
-        
         .wp-save-box { background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 12px; padding: 20px; margin-top: 20px; }
         .wp-save-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
         .wp-save-title { font-weight: 700; font-size: 16px; color: #0F172A; margin: 0; }
         .wp-badge { background: #DBEAFE; color: #1E40AF; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
         .wp-save-sub { color: #475569; font-size: 13.5px; line-height: 1.5; margin: 0 0 16px; }
-        
         .wp-input { width: 100%; padding: 12px 14px; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 12px; font-size: 15px; outline: none; }
         .wp-input:focus { border-color: #1C83F3; box-shadow: 0 0 0 3px rgba(28,131,243,0.15); }
         .wp-msg { padding: 12px; border-radius: 8px; font-size: 13.5px; margin-top: 12px; }
         .wp-msg-ok { background: #DCFCE7; color: #166534; }
         .wp-msg-err { background: #FEE2E2; color: #991B1B; }
-        
-        /* Add Another Sender Animation */
-        .wp-add-more-box { margin-top: 16px; animation: fadeIn 0.3s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .wp-add-more-box { margin-top: 16px; margin-bottom: 24px; padding: 16px; background: #F8FAFC; border-radius: 12px; border: 1px solid #E2E8F0; }
+        .sender-list { margin-top: 20px; text-align: left; }
+        .sender-item { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid #E2E8F0; border-radius: 10px; margin-bottom: 8px; background: #fff; }
+        .sender-dot { width: 10px; height: 10px; border-radius: 50%; background: #16A34A; }
       `}</style>
 
       <div className="wp-card">
@@ -108,17 +96,29 @@ function WelcomeInner() {
         <h1 className="wp-title">Sender connected</h1>
         <p className="wp-sub">Your email account is now available in CertWinX.</p>
 
-        <div className="wp-actions">
+        {/* List of Connected Senders */}
+        {senders.length > 0 && (
+          <div className="sender-list">
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#64748B', marginBottom: 8, textTransform: 'uppercase' }}>Connected Senders ({senders.length})</p>
+            {senders.map(s => (
+              <div key={s.id} className="sender-item">
+                <div className="sender-dot" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{s.google_email}</div>
+                  <div style={{ fontSize: 12, color: '#64748B' }}>{s.provider === 'hostinger' ? 'Hostinger SMTP' : 'Gmail API'}</div>
+                </div>
+                <span style={{ fontSize: 11, background: '#DCFCE7', color: '#166534', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>Active</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="wp-actions" style={{ marginTop: 24 }}>
           <Link href="/senders" className="wp-btn wp-btn-primary">Go to Senders</Link>
           <Link href="/dashboard" className="wp-btn wp-btn-outline">Dashboard</Link>
         </div>
 
-        {/* NEW: Add Another Sender Button */}
-        <button 
-          className="wp-btn wp-btn-outline" 
-          onClick={() => setShowAddMore(!showAddMore)}
-          style={{ marginBottom: 20 }}
-        >
+        <button className="wp-btn wp-btn-outline" onClick={() => setShowAddMore(!showAddMore)}>
           {showAddMore ? 'Cancel' : '+ Add another sender'}
         </button>
 
@@ -134,9 +134,7 @@ function WelcomeInner() {
               <h3 className="wp-save-title">Save your workspace</h3>
               <span className="wp-badge">Recommended</span>
             </div>
-            <p className="wp-save-sub">
-              Add an email and password to keep your senders, campaigns, and data across devices.
-            </p>
+            <p className="wp-save-sub">Add an email and password to keep your senders, campaigns, and data across devices.</p>
             <form onSubmit={saveAccount}>
               <input className="wp-input" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} disabled={busy} required />
               <input className="wp-input" type="password" placeholder="Password (min 8 chars)" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} required />
