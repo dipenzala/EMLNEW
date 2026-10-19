@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
+import LandingConnect from '@/components/LandingConnect';
 
 function WelcomeInner() {
   const router = useRouter();
@@ -90,6 +91,10 @@ function WelcomeInner() {
         .wp-msg { padding: 12px; border-radius: 8px; font-size: 13.5px; margin-top: 12px; }
         .wp-msg-ok { background: #DCFCE7; color: #166534; }
         .wp-msg-err { background: #FEE2E2; color: #991B1B; }
+        
+        /* Add Another Sender Animation */
+        .wp-add-more-box { margin-top: 16px; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
 
       <div className="wp-card">
@@ -108,7 +113,22 @@ function WelcomeInner() {
           <Link href="/dashboard" className="wp-btn wp-btn-outline">Dashboard</Link>
         </div>
 
-        {anonymous && (
+        {/* NEW: Add Another Sender Button */}
+        <button 
+          className="wp-btn wp-btn-outline" 
+          onClick={() => setShowAddMore(!showAddMore)}
+          style={{ marginBottom: 20 }}
+        >
+          {showAddMore ? 'Cancel' : '+ Add another sender'}
+        </button>
+
+        {showAddMore && (
+          <div className="wp-add-more-box">
+             <LandingConnect />
+          </div>
+        )}
+
+        {anonymous && !showAddMore && (
           <div className="wp-save-box">
             <div className="wp-save-head">
               <h3 className="wp-save-title">Save your workspace</h3>
