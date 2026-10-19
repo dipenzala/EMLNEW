@@ -8,13 +8,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const load = () => {
-      fetch('/api/dashboard').then(r => r.json()).then(setM).catch(() => {});
-      fetch('/api/activity').then(r => r.json()).then(data => {
+      fetch('/api/dashboard', { cache: 'no-store' }).then(r => r.json()).then(setM).catch(() => {});
+      fetch('/api/activity', { cache: 'no-store' }).then(r => r.json()).then(data => {
         if (Array.isArray(data)) setHistory(data); else setHistory([]);
       }).catch(() => setHistory([]));
     };
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 3000); // Fast polling (3s) for real-time feel
     return () => clearInterval(t);
   }, []);
 
@@ -32,7 +32,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ROW 1: EMAIL STATS */}
       <div className="grid-4" style={{ marginBottom: 20 }}>
         {[['Campaigns', m.campaigns],['Queued', m.queued],['Accepted', m.sent],['Failed', m.failed]].map(([k, v]) => (
           <div className="card" key={k as string}>
@@ -42,7 +41,6 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* ROW 2: SENDER CAPACITY */}
       <div className="card" style={{ marginBottom: 24, background: 'linear-gradient(135deg, #1C83F3 0%, #0F2E6E 100%)', color: '#fff' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
           <div>
@@ -68,21 +66,15 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-        {/* Progress Bar */}
         <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.2)', borderRadius: 10, height: 8 }}>
-          <div style={{ 
-            height: '100%', 
-            borderRadius: 10, 
-            background: '#86EFAC', 
-            width: `${Math.min(100, (m.used_today / (m.total_capacity || 1)) * 100)}%` 
-          }} />
+          <div style={{ height: '100%', borderRadius: 10, background: '#86EFAC', width: `${Math.min(100, (m.used_today / (m.total_capacity || 1)) * 100)}%` }} />
         </div>
       </div>
 
-      {/* ROW 3: TERMINAL LOGS */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0, fontSize: 16 }}>Live Send Logs</h2>
+          <span style={{ fontSize: 12, color: '#16A34A', fontWeight: 'bold' }}>● LIVE</span>
         </div>
         <div className="terminal-box">
           {!history ? (
@@ -92,20 +84,26 @@ export default function DashboardPage() {
           ) : (
             history.map((h) => {
               const time = h.created_at ? new Date(h.created_at).toLocaleTimeString() : 'Unknown Time';
-              const sender = h.sender_accounts?.google_email || h.sender_accounts?.[0]?.google_email || 'Unknown Sender';
+              let senderEmail = 'Unknown Sender';
+              if (h.sender_accounts) {
+                if (Array.isArray(h.sender_accounts)) senderEmail = h.sender_accounts[0]?.google_email || 'Unknown';
+                else senderEmail = h.sender_accounts.google_email || 'Unknown';
+              }
+              const toEmail = h.to_email || 'Unknown Email';
               const status = h.status ? String(h.status).toUpperCase() : 'UNKNOWN';
               const isErr = status === 'FAILED' || status === 'UNCERTAIN';
               
               return (
                 <div key={h.id} style={{ marginBottom: 4 }}>
                   <span style={{ color: '#888' }}>[{time}]</span>{' '}
-                  <span style={{ color: '#00bfff' }}>{sender}</span>{' '}
-                  <span style={{ color: '#00ff00' }}>-&gt; {h.to_email}</span>{' '}
+                  <span style={{ color: '#00bfff' }}>{senderEmail}</span>{' '}
+                  <span style={{ color: '#00ff00' }}>-&gt; {toEmail}</span>{' '}
                   <span style={{ color: isErr ? '#ff4444' : '#00ff00' }}>[{status}]</span>
                 </div>
               );
             })
           )}
+          <div style={{ marginTop: 10, animation: 'pulse-dot 2s infinite' }}>_</div>
         </div>
       </div>
     </div>

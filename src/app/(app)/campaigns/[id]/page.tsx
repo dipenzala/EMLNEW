@@ -39,7 +39,6 @@ export default function CampaignDetail() {
     if (pr.ok) {
       const p = await pr.json();
       setProgress(p);
-      // Fetch recent email statuses for this campaign
       const statusRes = await fetch(`/api/campaigns/${id}/status`, { cache: 'no-store' });
       if (statusRes.ok) setRecentContacts(await statusRes.json());
     }
@@ -47,15 +46,16 @@ export default function CampaignDetail() {
 
   useEffect(() => { 
     load(); 
-    const t = setInterval(load, 5000); 
+    const t = setInterval(load, 3000); // Fast poll for live tracking
     return () => clearInterval(t); 
   }, [id]);
 
   function applyTemplate(tplId: string) {
+    if (!tplId) return; // Ignore empty selection
     const tpl = templates.find(t => t.id === tplId);
     if (tpl && c) {
       setC({ ...c, subject: tpl.subject, html: tpl.html, text_body: tpl.text_body, template_id: tplId });
-      push('Template applied');
+      push('Template applied successfully');
     }
   }
 
@@ -76,7 +76,7 @@ export default function CampaignDetail() {
     const j = await r.json().catch(() => ({}));
     setBusy(false);
     if (r.ok) { 
-      push(a === 'send_now' ? `⚡ Sending started! Enqueued ${j.enqueued || 0} emails.` : 'Success'); 
+      push(a === 'send_now' ? `⚡ Sending started!` : 'Success'); 
       load(); 
     }
     else push(j.error || 'Failed');
@@ -184,6 +184,7 @@ export default function CampaignDetail() {
           
           <div className="field">
             <label>Choose Template</label>
+            {/* FIXED: Use empty string if null, and only apply if value is truthy */}
             <select className="select" value={c.template_id || ''} onChange={(e) => applyTemplate(e.target.value)}>
               <option value="">-- Select a Template --</option>
               {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
