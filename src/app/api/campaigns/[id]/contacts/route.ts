@@ -16,14 +16,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: 'No contacts provided' }, { status: 400 });
     }
 
-    // 1. Filter and deduplicate within this chunk
+    // Deduplicate within chunk
     const unique = new Map();
     contacts.forEach(c => {
       const e = String(c.email || '').trim().toLowerCase();
       if (e.includes('@')) {
         unique.set(e, { 
-          user_id: user.id, 
-          campaign_id: params.id, 
           email: e, 
           first_name: c.first_name ? String(c.first_name).trim() : null 
         });
@@ -33,23 +31,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const valid = Array.from(unique.values());
     let inserted = 0;
 
-    // 2. Insert in batches of 500
     for (let i = 0; i < valid.length; i += 500) {
       const chunk = valid.slice(i, i + 500);
       
-      // Use standard upsert, but if it fails (due to missing SQL index), catch the error
-      const { error, count } = await admin
-        .from('contacts')
-        .upsert(chunk, { onConflict: 'campaign_id,email', ignoreDuplicates: true, count: 'exact' });
+      // USE RPC INSTEAD OF UPSERT (Bypasses the bug)
+      const { data: count, error } = await admin.rpc('bulk_insert_campaign_contacts', {
+        p_user_id: user.id,
+        p_campaign_id: params.id,
+        p_contacts: chunk
+      });
       
       if (error) {
-        console.error("DB Insert Error:", error.message);
-        return NextResponse.json({ error: `Database error: ${error.message}. Please run the SQL fix in Supabase.` }, { status: 500 });
+        console.error("RPC DB Error:", error.message);
+        return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 });
       }
       inserted += (count || 0);
     }
     
-    // 3. Get the TRUE total count for this campaign
+    // Get true total for this campaign
     const { count: totalCount } = await admin
       .from('contacts')
       .select('id', { count: 'exact', head: true })
