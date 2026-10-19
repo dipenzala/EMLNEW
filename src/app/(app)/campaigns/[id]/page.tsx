@@ -59,11 +59,15 @@ export default function CampaignDetail() {
   // 🔥 FORCE QUEUE ALL CONTACTS
   async function forceQueue() {
     setBusy(true);
-    push('⏳ Queuing all 17k+ contacts...');
+    push('⏳ Queuing ALL contacts and starting send...');
     const r = await fetch(`/api/campaigns/${id}/force-queue`, { method: 'POST' });
     const j = await r.json();
     setBusy(false);
-    if (r.ok) { push(`✅ ${j.totalEnqueued} contacts queued!`); loadLiveStats(); }
+    if (r.ok) { 
+      push(`✅ ${j.totalEnqueued} contacts queued! Auto-sending started.`); 
+      loadCampaign();
+      loadLiveStats(); 
+    }
     else push(j.error || 'Force queue failed');
   }
 

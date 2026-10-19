@@ -8,43 +8,38 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   try {
     const user = await requireUser();
     const admin = createSupabaseAdmin();
-    
-    // 1. Get all contacts for this campaign
-    const { data: contacts } = await admin
-      .from('contacts')
-      .select('id, email')
-      .eq('campaign_id', params.id)
-      .eq('unsubscribed', false);
 
-    if (!contacts || contacts.length === 0) {
-      return NextResponse.json({ error: 'No contacts found' }, { status: 400 });
+    // 1. Fetch campaign to get sender ID
+    const { data: campaign } = await admin.from('campaigns').select('*').eq('id', params.id).eq('user_id', user.id).maybeSingle();
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    // 2. Use our Database Function to enqueue all contacts (Bypasses JS limits)
+    const { data: count, error } = await admin.rpc('enqueue_campaign_jobs_bulk', {
+      p_campaign_id: params.id,
+      p_user_id: user.id,
+      p_sender_id: campaign.sender_account_id || null
+    });
+
+    if (error) {
+      console.error("RPC Error:", error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // 2. Prepare rows for email_jobs
-    const rows = contacts.map(c => ({
-      campaign_id: params.id,
-      user_id: user.id,
-      contact_id: c.id,
-      to_email: c.email,
-      status: 'queued'
-    }));
-
-    // 3. Insert in chunks of 2000
-    let totalEnqueued = 0;
-    for (let i = 0; i < rows.length; i += 2000) {
-      const chunk = rows.slice(i, i + 2000);
-      const { error, count } = await admin.from('email_jobs').upsert(chunk, { 
-        onConflict: 'campaign_id,contact_id', 
-        ignoreDuplicates: true, 
-        count: 'exact' 
-      });
-      if (!error) totalEnqueued += (count || 0);
-    }
-
-    // 4. Update campaign status to running
+    // 3. Mark campaign as running
     await admin.from('campaigns').update({ status: 'running' }).eq('id', params.id);
 
-    return NextResponse.json({ ok: true, totalEnqueued });
+    // 4. Trigger the background auto-send loop
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const secret = process.env.CRON_SECRET;
+    if (appUrl && secret) {
+      fetch(`${appUrl}/api/drain`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
+        body: JSON.stringify({ userId: user.id, depth: 0 }),
+      }).catch(() => {});
+    }
+
+    return NextResponse.json({ ok: true, totalEnqueued: count || 0 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
