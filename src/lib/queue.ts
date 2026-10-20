@@ -24,11 +24,17 @@ async function pickAndReserveSender(admin: any, _userId: string, preferred: stri
   }
   const { data: senders } = await admin.from('sender_accounts').select('id').eq('status', 'connected').eq('paused', false);
   if (!senders || senders.length === 0) return null;
-  const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+  
   const usage = await Promise.all(senders.map(async (s: { id: string }) => {
-    const { count } = await admin.from('send_events').select('id', { count: 'exact', head: true }).eq('sender_account_id', s.id).in('kind', ['reserved', 'accepted']).gte('created_at', since);
+    // Count today's usage (IST)
+    const { count } = await admin.from('send_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender_account_id', s.id)
+      .in('kind', ['reserved', 'accepted'])
+      .gte('created_at', new Date(new Date().setHours(0,0,0,0)).toISOString()); 
     return { id: s.id, used: count ?? 0 };
   }));
+  
   usage.sort((a: any, b: any) => a.used - b.used);
   for (const s of usage) {
     if (s.used >= cap) continue;
@@ -49,6 +55,7 @@ export async function processBatch(userId: string, limit: number): Promise<Proce
   result.claimed = jobs?.length ?? 0;
   if (!jobs || jobs.length === 0) return result;
 
+  // ⚡ 10x Faster Concurrency
   const CONCURRENCY = 10;
   for (let i = 0; i < jobs.length; i += CONCURRENCY) {
     const chunk = jobs.slice(i, i + CONCURRENCY);
@@ -70,7 +77,6 @@ export async function processBatch(userId: string, limit: number): Promise<Proce
 
 async function processOne(admin: any, job: any): Promise<'sent' | 'failed' | 'skipped' | 'uncertain'> {
   const jobId = job.id as string; const userId = job.user_id as string; const to = job.to_email as string;
-  
   const { data: campaign } = await admin.from('campaigns').select('*').eq('id', job.campaign_id).single();
   if (!campaign || !['running', 'scheduled'].includes(campaign.status)) {
     await admin.from('email_jobs').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', jobId); 
