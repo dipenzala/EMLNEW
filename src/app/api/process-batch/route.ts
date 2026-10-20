@@ -10,7 +10,9 @@ export async function POST(req: Request) {
   if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') return NextResponse.json({ error: 'Global sending disabled.' }, { status: 400 });
 
   try { 
-    const result = await processBatch(user.id, 50); 
+    // 🔥 Increased Batch Size to 200 for 20x Concurrency
+    const result = await processBatch(user.id, 200); 
+    
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     const secret = process.env.CRON_SECRET;
     if (appUrl && secret) {

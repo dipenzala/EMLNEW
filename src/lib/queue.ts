@@ -26,7 +26,6 @@ async function pickAndReserveSender(admin: any, _userId: string, preferred: stri
   if (!senders || senders.length === 0) return null;
   
   const usage = await Promise.all(senders.map(async (s: { id: string }) => {
-    // Count today's usage (IST)
     const { count } = await admin.from('send_events')
       .select('id', { count: 'exact', head: true })
       .eq('sender_account_id', s.id)
@@ -55,8 +54,8 @@ export async function processBatch(userId: string, limit: number): Promise<Proce
   result.claimed = jobs?.length ?? 0;
   if (!jobs || jobs.length === 0) return result;
 
-  // ⚡ 10x Faster Concurrency
-  const CONCURRENCY = 10;
+  // 🚀 20x CONCURRENCY 🚀
+  const CONCURRENCY = 20; 
   for (let i = 0; i < jobs.length; i += CONCURRENCY) {
     const chunk = jobs.slice(i, i + CONCURRENCY);
     const outcomes = await Promise.allSettled(chunk.map((job: any) => processOne(admin, job)));
