@@ -155,3 +155,15 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; margin-top: 0; }
   .nav a { margin: 0; }
   .main { padding: 16px; }
 }
+
+/* Mobile UI Fixes */
+@media (max-width: 900px) {
+  .app-shell { display: flex; flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: static; padding: 10px; overflow-x: auto; display: flex; border-right: none; border-bottom: 1px solid #E2E8F0; }
+  .sidebar .brand { display: none; }
+  .nav { display: flex; gap: 10px; margin: 0; }
+  .nav a { white-space: nowrap; margin: 0; }
+  .main { padding: 15px; }
+  .grid-2, .grid-4, .grid-3 { grid-template-columns: 1fr !important; }
+  .terminal-box { height: 300px !important; font-size: 12px !important; padding: 10px !important; }
+}

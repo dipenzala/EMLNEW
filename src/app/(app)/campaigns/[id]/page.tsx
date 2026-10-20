@@ -11,7 +11,7 @@ export default function CampaignDetail() {
   const [c, setC] = useState<any>(null);
   const [progress, setProgress] = useState<any>(null);
   const [busy, setBusy] = useState(false);
-  const [contactCount, setContactCount] = useState<number | null>(null);
+  const [contactCount, setContactCount] = useState<number>(0);
   
   const [importData, setImportData] = useState<any[] | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -41,7 +41,7 @@ export default function CampaignDetail() {
   useEffect(() => { 
     loadCampaign(); 
     loadLiveStats();
-    const t = setInterval(loadLiveStats, 4000); 
+    const t = setInterval(loadLiveStats, 3000); 
     return () => clearInterval(t); 
   }, [id]);
 
@@ -56,42 +56,34 @@ export default function CampaignDetail() {
     return r.ok;
   }
 
-  // 🔥 FORCE QUEUE ALL CONTACTS
   async function forceQueue() {
     setBusy(true);
-    push('⏳ Queuing ALL contacts and starting send...');
+    push('⏳ Queuing all contacts...');
     const r = await fetch(`/api/campaigns/${id}/force-queue`, { method: 'POST' });
     const j = await r.json();
     setBusy(false);
-    if (r.ok) { 
-      push(`✅ ${j.totalEnqueued} contacts queued! Auto-sending started.`); 
-      loadCampaign();
-      loadLiveStats(); 
-    }
+    if (r.ok) { push(`✅ ${j.totalEnqueued} contacts queued!`); loadLiveStats(); }
     else push(j.error || 'Force queue failed');
   }
 
-  // 🔥 PROCESS BATCH (AUTO-SEND)
   async function processManualQueue() {
     setBusy(true);
     await fetch('/api/process-batch', { method: 'POST' });
     setBusy(false);
-    push('⚡ Sending started in background!');
+    push('⚡ Sending started!');
     loadLiveStats();
   }
 
-  // 🛑 STOP CAMPAIGN
   async function stopCampaign() {
-    if (!confirm('Are you sure you want to stop? All queued emails will be cancelled.')) return;
+    if (!confirm('Stop campaign? Queued emails will be cancelled.')) return;
     setBusy(true);
-    const r = await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
+    await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
     setBusy(false);
-    if (r.ok) { push('Campaign Stopped 🛑'); loadCampaign(); loadLiveStats(); }
+    push('Stopped 🛑'); loadCampaign(); loadLiveStats();
   }
 
-  // 🗑 DELETE CAMPAIGN
   async function deleteCampaign() {
-    if (!confirm('🚨 DELETE this campaign?')) return;
+    if (!confirm('🚨 Delete this campaign?')) return;
     setBusy(true);
     const r = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
     setBusy(false);
@@ -126,7 +118,8 @@ export default function CampaignDetail() {
     setMappingBusy(true);
     await save();
     const mapped = importData.map(r => ({ email: String(r[mapEmail] || '').trim(), first_name: mapName ? String(r[mapName] || '').trim() : undefined })).filter(x => x.email.includes('@'));
-    let total = 0;
+    let totalNew = 0;
+    let finalTotal = 0;
     try {
       for (let i = 0; i < mapped.length; i += 2000) {
         const chunk = mapped.slice(i, i + 2000);
@@ -134,9 +127,10 @@ export default function CampaignDetail() {
         const r = await fetch(`/api/campaigns/${id}/contacts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contacts: chunk }) });
         if (!r.ok) throw new Error('Chunk failed');
         const j = await r.json();
-        total += (j.inserted || 0);
+        totalNew += (j.inserted || 0);
+        finalTotal = j.totalCount || 0;
       }
-      push(`✅ ${total} new contacts imported!`);
+      push(`✅ ${totalNew} new imported. Total: ${finalTotal}`);
       setImportData(null); loadLiveStats();
     } catch (err: any) { push(err.message || 'Import failed.'); }
     finally { setUploadProgress(''); setMappingBusy(false); }
@@ -150,19 +144,10 @@ export default function CampaignDetail() {
         <h1>{c.name} {c.status === 'running' && <span className="badge badge-ok" style={{marginLeft:10}}>Running</span>}</h1>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button className="btn" onClick={async () => { if(await save()) push('Saved ✅'); }} disabled={busy}>Save</button>
-          
-          {/* 🔥 FORCE QUEUE BUTTON (Top) */}
-          <button className="btn" style={{ background: '#DBEAFE', color: '#1E40AF', fontWeight: 'bold' }} onClick={forceQueue} disabled={busy}>
-            📥 Force Queue All
-          </button>
-          
-          {/* 🔥 AUTO SEND BUTTON (Top) */}
+          <button className="btn" style={{ background: '#DBEAFE', color: '#1E40AF', fontWeight: 'bold' }} onClick={forceQueue} disabled={busy}>📥 Force Queue All</button>
           {progress?.queued > 0 && (
-            <button className="btn" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 'bold' }} onClick={processManualQueue} disabled={busy}>
-              ▶ Auto-Send
-            </button>
+            <button className="btn" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 'bold' }} onClick={processManualQueue} disabled={busy}>▶ Auto-Send</button>
           )}
-
           <button className="btn" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={stopCampaign} disabled={busy}>🛑 Stop</button>
           <button className="btn btn-danger" onClick={deleteCampaign} disabled={busy}>🗑 Delete</button>
         </div>
@@ -170,9 +155,9 @@ export default function CampaignDetail() {
 
       {progress && (
         <div className="card" style={{ marginBottom: 20, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
-          <h3 style={{ margin: '0 0 10px', fontSize: 16 }}>📊 Live Campaign Tracking</h3>
-          <div style={{ display: 'flex', gap: 30 }}>
-            <div><strong>Total Uploaded:</strong> {contactCount || 0}</div>
+          <h3 style={{ margin: '0 0 10px', fontSize: 16 }}>📊 Live Tracking</h3>
+          <div style={{ display: 'flex', gap: 30, flexWrap: 'wrap' }}>
+            <div><strong>Total Uploaded:</strong> {contactCount}</div>
             <div style={{ color: '#D97706' }}><strong>In Queue:</strong> {progress.queued}</div>
             <div style={{ color: '#16A34A' }}><strong>Sent:</strong> {progress.accepted}</div>
             <div style={{ color: '#DC2626' }}><strong>Failed:</strong> {progress.failed}</div>
@@ -200,7 +185,7 @@ export default function CampaignDetail() {
           ) : (
             <div style={{ padding: 16, background: '#f5f5f5', borderRadius: 8 }}>
               <h4>Preview ({importData.length} rows)</h4>
-              <div style={{ display: 'flex', gap: 10, margin: '10px 0' }}>
+              <div style={{ display: 'flex', gap: 10, margin: '10px 0', flexWrap: 'wrap' }}>
                 <select className="select" value={mapEmail} onChange={e => setMapEmail(e.target.value)} style={{ background: mapEmail ? '#DCFCE7' : '#fff' }}>
                     <option value="">Email Col...</option>
                     {headers.map(h => <option key={h} value={h}>{h}</option>)}
