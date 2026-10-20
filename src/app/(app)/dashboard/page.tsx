@@ -76,7 +76,7 @@ export default function DashboardPage() {
           <h2 style={{ margin: 0, fontSize: 16 }}>Live Send Logs</h2>
           <span style={{ fontSize: 12, color: '#16A34A', fontWeight: 'bold' }}>● LIVE</span>
         </div>
-        <div className="terminal-box">
+        <div className="terminal-box" style={{ height: '500px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '14px', padding: '20px', lineHeight: '1.6' }}>
           {!history ? (
             <div>Loading logs...</div>
           ) : history.length === 0 ? (

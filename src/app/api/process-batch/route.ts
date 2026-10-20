@@ -3,15 +3,15 @@ import { requireUser } from '@/lib/auth';
 import { processBatch } from '@/lib/queue';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const user = await requireUser();
   if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') return NextResponse.json({ error: 'Global sending disabled.' }, { status: 400 });
 
   try { 
-    const result = await processBatch(user.id, 100); // Process 100 at once
+    const result = await processBatch(user.id, 100); 
     
-    // Auto-loop trigger for next batch
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     const secret = process.env.CRON_SECRET;
     if (appUrl && secret) {

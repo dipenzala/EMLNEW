@@ -49,8 +49,7 @@ export async function processBatch(userId: string, limit: number): Promise<Proce
   result.claimed = jobs?.length ?? 0;
   if (!jobs || jobs.length === 0) return result;
 
-  // Process 5 emails at the same time
-  const CONCURRENCY = 5;
+  const CONCURRENCY = 10;
   for (let i = 0; i < jobs.length; i += CONCURRENCY) {
     const chunk = jobs.slice(i, i + CONCURRENCY);
     const outcomes = await Promise.allSettled(chunk.map((job: any) => processOne(admin, job)));
