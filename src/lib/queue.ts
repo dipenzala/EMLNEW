@@ -48,15 +48,23 @@ export async function processBatch(userId: string, limit: number): Promise<Proce
   
   result.claimed = jobs?.length ?? 0;
   if (!jobs || jobs.length === 0) return result;
-  
-  for (const job of jobs) {
-    try {
-      const outcome = await processOne(admin, job);
-      if (outcome === 'sent') result.sent++; 
-      else if (outcome === 'skipped') result.skipped++; 
-      else if (outcome === 'uncertain') result.uncertain++; 
-      else result.failed++;
-    } catch (e) { result.failed++; }
+
+  // Process 5 emails at the same time
+  const CONCURRENCY = 5;
+  for (let i = 0; i < jobs.length; i += CONCURRENCY) {
+    const chunk = jobs.slice(i, i + CONCURRENCY);
+    const outcomes = await Promise.allSettled(chunk.map((job: any) => processOne(admin, job)));
+    
+    for (const outcome of outcomes) {
+      if (outcome.status === 'fulfilled') {
+        if (outcome.value === 'sent') result.sent++;
+        else if (outcome.value === 'skipped') result.skipped++;
+        else if (outcome.value === 'uncertain') result.uncertain++;
+        else result.failed++;
+      } else {
+        result.failed++;
+      }
+    }
   }
   return result;
 }
@@ -88,14 +96,11 @@ async function processOne(admin: any, job: any): Promise<'sent' | 'failed' | 'sk
   const text = toPlainText(html);
   const subject = renderTemplate(campaign.subject ?? '', tokens, { html: false });
 
-  const pixel = `<img src="${process.env.NEXT_PUBLIC_APP_URL || ''}/api/track/open/${jobId}" width="1" height="1" style="display:none;" />`;
-  html = html.includes('</body>') ? html.replace('</body>', `${pixel}</body>`) : html + pixel;
-
   const from = `Startup India Certificate <${sender.google_email}>`;
   try {
     const messageId = await Promise.race([
       sendViaSender(senderId, { to, from, subject, html, text, unsubscribeUrl: unsubUrl }),
-      new Promise<string>((_, rej) => setTimeout(() => rej(new Error('timeout')), 25000)),
+      new Promise<string>((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000)),
     ]);
     
     await admin.from('email_jobs').update({ status: 'accepted', message_id: messageId, updated_at: new Date().toISOString() }).eq('id', jobId);
@@ -115,14 +120,9 @@ export async function enqueueCampaignJobs(campaignId: string): Promise<number> {
   const admin = createSupabaseAdmin();
   const { data: campaign } = await admin.from('campaigns').select('*').eq('id', campaignId).single();
   if (!campaign) throw new Error('campaign not found');
-
-  // FORCE USE RPC (Bypass Vercel Timeout)
   const { data: count, error } = await admin.rpc('enqueue_campaign_jobs_bulk', {
-    p_campaign_id: campaignId,
-    p_user_id: campaign.user_id,
-    p_sender_id: campaign.sender_account_id || null,
+    p_campaign_id: campaignId, p_user_id: campaign.user_id, p_sender_id: campaign.sender_account_id || null,
   });
-
   if (error) throw error;
   return count || 0;
 }

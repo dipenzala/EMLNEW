@@ -6,16 +6,12 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   const user = await requireUser();
-  
-  if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') {
-    return NextResponse.json({ error: 'Global sending is disabled.' }, { status: 400 });
-  }
+  if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') return NextResponse.json({ error: 'Global sending disabled.' }, { status: 400 });
 
   try { 
-    // Process first batch of 50
-    const result = await processBatch(user.id, 50); 
+    const result = await processBatch(user.id, 100); // Process 100 at once
     
-    // 🔥 TRIGGER THE BACKGROUND LOOP (Chain)
+    // Auto-loop trigger for next batch
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     const secret = process.env.CRON_SECRET;
     if (appUrl && secret) {
@@ -25,10 +21,7 @@ export async function POST(req: Request) {
         body: JSON.stringify({ userId: user.id, depth: 0 }),
       }).catch(() => {});
     }
-    
     return NextResponse.json(result); 
   }
-  catch (e) { 
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 }); 
-  }
+  catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 }); }
 }
