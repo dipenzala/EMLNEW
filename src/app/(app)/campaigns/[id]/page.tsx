@@ -20,6 +20,7 @@ export default function CampaignDetail() {
   const [mappingBusy, setMappingBusy] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
+  const [importLogs, setImportLogs] = useState<string[]>(['[System] Waiting for import to start...']);
   
   const fileRef = useRef<HTMLInputElement>(null);
   const { push } = useToast();
@@ -57,11 +58,11 @@ export default function CampaignDetail() {
   }
 
   async function clearContacts() {
-    if (!confirm('🚨 WARNING: This will remove all uploaded contacts from THIS campaign so you can upload a fresh list. Proceed?')) return;
+    if (!confirm('🚨 WARNING: This will remove ALL uploaded contacts from this campaign so you can upload a fresh list. Proceed?')) return;
     setBusy(true);
     const r = await fetch(`/api/campaigns/${id}/clear-contacts`, { method: 'POST' });
     setBusy(false);
-    if (r.ok) { push('Contacts cleared! You can now upload again.'); loadLiveStats(); }
+    if (r.ok) { push('Contacts cleared! You can upload again.'); setImportLogs(prev => [...prev, '[System] Contacts cleared successfully.']); loadLiveStats(); }
     else push('Failed to clear contacts');
   }
 
@@ -79,7 +80,7 @@ export default function CampaignDetail() {
     setBusy(true);
     await fetch('/api/process-batch', { method: 'POST' });
     setBusy(false);
-    push('⚡ Sending started!');
+    push('⚡ Sending started in background!');
     loadLiveStats();
   }
 
@@ -87,6 +88,7 @@ export default function CampaignDetail() {
     const file = e.target.files?.[0];
     if (!file) return;
     setParsing(true);
+    setImportLogs(prev => [...prev, `[File] Reading: ${file.name}`]);
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
@@ -99,7 +101,11 @@ export default function CampaignDetail() {
         const keys = Object.keys(data[0] as object);
         setMapEmail(keys.find(k => /email|mail/i.test(k)) || '');
         setMapName(keys.find(k => /name|first/i.test(k)) || '');
-      } catch (err: any) { push(err.message || 'Invalid file.'); }
+        setImportLogs(prev => [...prev, `[File] Loaded ${data.length} rows. Ready to import.`]);
+      } catch (err: any) { 
+        push(err.message || 'Invalid file.'); 
+        setImportLogs(prev => [...prev, `[Error] Invalid file format.`]);
+      }
       finally { setParsing(false); }
     };
     reader.readAsBinaryString(file);
@@ -113,6 +119,7 @@ export default function CampaignDetail() {
     
     if (mapped.length === 0) {
       push('❌ No valid emails found in the selected column.');
+      setImportLogs(prev => [...prev, `[Error] 0 valid emails found in selected column.`]);
       return;
     }
 
@@ -126,6 +133,8 @@ export default function CampaignDetail() {
       for (let i = 0; i < mapped.length; i += 2000) {
         const chunk = mapped.slice(i, i + 2000);
         setUploadProgress(`Importing ${Math.min(i + 2000, mapped.length)} / ${mapped.length}...`);
+        setImportLogs(prev => [...prev, `[Upload] Sending chunk ${i/2000 + 1} (${chunk.length} rows)...`]);
+        
         const r = await fetch(`/api/campaigns/${id}/contacts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contacts: chunk }) });
         if (!r.ok) throw new Error('Chunk failed');
         
@@ -133,18 +142,26 @@ export default function CampaignDetail() {
         totalNew += (j.inserted || 0);
         finalTotal = j.totalCount || 0;
         totalInvalid += (j.invalidCount || 0);
+        
+        setImportLogs(prev => [...prev, `[Upload] Chunk ${i/2000 + 1} saved. Added: ${j.inserted}, Total: ${j.totalCount}`]);
       }
 
       if (totalNew === 0 && totalInvalid === 0) {
-        push('⚠️ 0 new contacts. All emails already exist. Click "Clear Contacts" to re-upload.');
+        push('⚠️ 0 new contacts. All emails already exist. Click "Clear Contacts" to reset.');
+        setImportLogs(prev => [...prev, `[Warning] 0 new contacts added. All duplicates skipped.`]);
       } else if (totalNew === 0 && totalInvalid > 0) {
         push(`❌ 0 imported. ${totalInvalid} invalid emails found.`);
+        setImportLogs(prev => [...prev, `[Error] Imported 0. Invalid emails: ${totalInvalid}`]);
       } else {
         push(`✅ ${totalNew} new imported. Total in campaign: ${finalTotal}`);
+        setImportLogs(prev => [...prev, `[Success] Import complete. Total contacts: ${finalTotal}`]);
       }
       
       setImportData(null); loadLiveStats();
-    } catch (err: any) { push(err.message || 'Import failed.'); }
+    } catch (err: any) { 
+      push(err.message || 'Import failed.'); 
+      setImportLogs(prev => [...prev, `[Error] ${err.message || 'Import failed.'}`]);
+    }
     finally { setUploadProgress(''); setMappingBusy(false); }
   }
 
@@ -157,7 +174,6 @@ export default function CampaignDetail() {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button className="btn" onClick={async () => { if(await save()) push('Saved ✅'); }} disabled={busy}>Save</button>
           <button className="btn" style={{ background: '#DBEAFE', color: '#1E40AF', fontWeight: 'bold' }} onClick={forceQueue} disabled={busy}>📥 Force Queue All</button>
-          <button className="btn btn-danger" onClick={clearContacts} disabled={busy}>🗑 Clear Contacts</button>
           {progress?.queued > 0 && (
             <button className="btn" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 'bold' }} onClick={processManualQueue} disabled={busy}>▶ Auto-Send</button>
           )}
@@ -176,21 +192,29 @@ export default function CampaignDetail() {
         </div>
       )}
 
-      <div className="grid-2">
+      <div className="grid-2" style={{ marginBottom: 20 }}>
+        {/* STEP 1: COMPOSE */}
         <div className="card">
-          <p className="card-title">Compose Email (HTML)</p>
+          <div style={{ background: '#DBEAFE', color: '#1E40AF', padding: '5px 10px', borderRadius: 6, display: 'inline-block', fontWeight: 'bold', marginBottom: 15, fontSize: 13 }}>STEP 1</div>
+          <p className="card-title">Compose Email</p>
           <div className="field"><label>Subject</label><input className="input" value={c.subject || ''} onChange={(e) => setC({ ...c, subject: e.target.value })} /></div>
           <div className="field"><label>HTML Body</label><textarea className="textarea" style={{ minHeight: 300 }} value={c.html || ''} onChange={(e) => setC({ ...c, html: e.target.value })} placeholder="<p>Hi {{first_name}},</p>" /></div>
         </div>
 
+        {/* STEP 2: UPLOAD CONTACTS */}
         <div className="card">
-          <p className="card-title">Bulk Contacts</p>
+          <div style={{ background: '#DBEAFE', color: '#1E40AF', padding: '5px 10px', borderRadius: 6, display: 'inline-block', fontWeight: 'bold', marginBottom: 15, fontSize: 13 }}>STEP 2</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <p className="card-title">Upload Contacts</p>
+            <button className="btn btn-sm btn-danger" onClick={clearContacts} disabled={busy || contactCount === 0}>🗑 Clear Old Data</button>
+          </div>
+          
           {parsing ? (
             <div style={{ padding: 30, textAlign: 'center' }}>⏳ Reading...</div>
           ) : !importData ? (
             <div style={{ padding: 30, textAlign: 'center', border: '2px dashed #ccc', borderRadius: 8 }}>
-              <p style={{ color: '#666', marginBottom: 15 }}>Upload contacts</p>
-              <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Select Excel/CSV</button>
+              <p style={{ color: '#666', marginBottom: 15 }}>Upload contacts (Excel/CSV)</p>
+              <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Select File</button>
               <input ref={fileRef} type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} onChange={handleFile} />
             </div>
           ) : (
@@ -210,12 +234,25 @@ export default function CampaignDetail() {
                 <div style={{ padding: 12, background: '#DBEAFE', color: '#1E40AF', borderRadius: 8, fontWeight: 'bold' }}>⏳ {uploadProgress}</div>
               ) : (
                 <>
-                  <button className="btn btn-primary" onClick={submitMappedData} disabled={mappingBusy}>{mappingBusy ? 'Importing...' : `Import ${importData.length}`}</button>
+                  <button className="btn btn-primary" onClick={submitMappedData} disabled={mappingBusy}>{mappingBusy ? 'Importing...' : `Start Import`}</button>
                   <button className="btn" style={{ marginLeft: 8 }} onClick={() => setImportData(null)}>Cancel</button>
                 </>
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* STEP 3: LIVE IMPORT LOGS */}
+      <div className="card">
+        <div style={{ background: '#DBEAFE', color: '#1E40AF', padding: '5px 10px', borderRadius: 6, display: 'inline-block', fontWeight: 'bold', marginBottom: 15, fontSize: 13 }}>STEP 3</div>
+        <p className="card-title">Live Import Logs</p>
+        <div className="terminal-box" style={{ height: '200px' }}>
+          {importLogs.map((log, i) => (
+            <div key={i} style={{ marginBottom: 4, color: log.includes('Error') ? '#ff4444' : log.includes('Success') ? '#00ff00' : '#00bfff' }}>
+              {log}
+            </div>
+          ))}
         </div>
       </div>
     </div>
