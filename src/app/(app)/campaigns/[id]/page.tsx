@@ -56,6 +56,15 @@ export default function CampaignDetail() {
     return r.ok;
   }
 
+  async function clearContacts() {
+    if (!confirm('🚨 WARNING: This will remove all uploaded contacts from THIS campaign so you can upload a fresh list. Proceed?')) return;
+    setBusy(true);
+    const r = await fetch(`/api/campaigns/${id}/clear-contacts`, { method: 'POST' });
+    setBusy(false);
+    if (r.ok) { push('Contacts cleared! You can now upload again.'); loadLiveStats(); }
+    else push('Failed to clear contacts');
+  }
+
   async function forceQueue() {
     setBusy(true);
     push('⏳ Queuing all contacts...');
@@ -127,7 +136,7 @@ export default function CampaignDetail() {
       }
 
       if (totalNew === 0 && totalInvalid === 0) {
-        push('⚠️ 0 new contacts. All emails already exist. Delete this campaign to start fresh.');
+        push('⚠️ 0 new contacts. All emails already exist. Click "Clear Contacts" to re-upload.');
       } else if (totalNew === 0 && totalInvalid > 0) {
         push(`❌ 0 imported. ${totalInvalid} invalid emails found.`);
       } else {
@@ -148,6 +157,7 @@ export default function CampaignDetail() {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button className="btn" onClick={async () => { if(await save()) push('Saved ✅'); }} disabled={busy}>Save</button>
           <button className="btn" style={{ background: '#DBEAFE', color: '#1E40AF', fontWeight: 'bold' }} onClick={forceQueue} disabled={busy}>📥 Force Queue All</button>
+          <button className="btn btn-danger" onClick={clearContacts} disabled={busy}>🗑 Clear Contacts</button>
           {progress?.queued > 0 && (
             <button className="btn" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 'bold' }} onClick={processManualQueue} disabled={busy}>▶ Auto-Send</button>
           )}
