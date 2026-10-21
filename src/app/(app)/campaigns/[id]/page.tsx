@@ -41,7 +41,7 @@ export default function CampaignDetail() {
   useEffect(() => { 
     loadCampaign(); 
     loadLiveStats();
-    const t = setInterval(loadLiveStats, 3000); 
+    const t = setInterval(loadLiveStats, 4000); 
     return () => clearInterval(t); 
   }, [id]);
 
@@ -74,22 +74,6 @@ export default function CampaignDetail() {
     loadLiveStats();
   }
 
-  async function stopCampaign() {
-    if (!confirm('Stop campaign? Queued emails will be cancelled.')) return;
-    setBusy(true);
-    await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
-    setBusy(false);
-    push('Stopped 🛑'); loadCampaign(); loadLiveStats();
-  }
-
-  async function deleteCampaign() {
-    if (!confirm('🚨 Delete this campaign?')) return;
-    setBusy(true);
-    const r = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
-    setBusy(false);
-    if (r.ok) { push('Deleted'); router.push('/campaigns'); }
-  }
-
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -115,22 +99,41 @@ export default function CampaignDetail() {
 
   async function submitMappedData() {
     if (!importData || !mapEmail) { push('Email column not detected.'); return; }
+    
+    const mapped = importData.map(r => ({ email: String(r[mapEmail] || '').trim(), first_name: mapName ? String(r[mapName] || '').trim() : undefined })).filter(x => x.email.includes('@'));
+    
+    if (mapped.length === 0) {
+      push('❌ No valid emails found in the selected column.');
+      return;
+    }
+
     setMappingBusy(true);
     await save();
-    const mapped = importData.map(r => ({ email: String(r[mapEmail] || '').trim(), first_name: mapName ? String(r[mapName] || '').trim() : undefined })).filter(x => x.email.includes('@'));
     let totalNew = 0;
     let finalTotal = 0;
+    let totalInvalid = 0;
+
     try {
       for (let i = 0; i < mapped.length; i += 2000) {
         const chunk = mapped.slice(i, i + 2000);
         setUploadProgress(`Importing ${Math.min(i + 2000, mapped.length)} / ${mapped.length}...`);
         const r = await fetch(`/api/campaigns/${id}/contacts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contacts: chunk }) });
         if (!r.ok) throw new Error('Chunk failed');
+        
         const j = await r.json();
         totalNew += (j.inserted || 0);
         finalTotal = j.totalCount || 0;
+        totalInvalid += (j.invalidCount || 0);
       }
-      push(`✅ ${totalNew} new imported. Total: ${finalTotal}`);
+
+      if (totalNew === 0 && totalInvalid === 0) {
+        push('⚠️ 0 new contacts. All emails already exist in this campaign.');
+      } else if (totalNew === 0 && totalInvalid > 0) {
+        push(`❌ 0 imported. ${totalInvalid} invalid emails found.`);
+      } else {
+        push(`✅ ${totalNew} new imported. Total in campaign: ${finalTotal}`);
+      }
+      
       setImportData(null); loadLiveStats();
     } catch (err: any) { push(err.message || 'Import failed.'); }
     finally { setUploadProgress(''); setMappingBusy(false); }
@@ -148,8 +151,6 @@ export default function CampaignDetail() {
           {progress?.queued > 0 && (
             <button className="btn" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 'bold' }} onClick={processManualQueue} disabled={busy}>▶ Auto-Send</button>
           )}
-          <button className="btn" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={stopCampaign} disabled={busy}>🛑 Stop</button>
-          <button className="btn btn-danger" onClick={deleteCampaign} disabled={busy}>🗑 Delete</button>
         </div>
       </div>
 

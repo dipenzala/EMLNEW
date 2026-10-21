@@ -1,35 +1,58 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
-import { createSupabaseServer } from '@/lib/supabase/server';
+import { createSupabaseAdmin } from '@/lib/supabase/server';
+import { emailSchema } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: Request) {
-  const user = await requireUser();
-  const url = new URL(req.url);
-  const sb = createSupabaseServer();
-  
-  const campaignId = url.searchParams.get('campaign_id');
-  const isCount = url.searchParams.get('count') === '1';
+export async function POST(req: Request, { params }: { params: { id: string } }) {
+  try {
+    const user = await requireUser();
+    const admin = createSupabaseAdmin();
+    
+    const body = await req.json().catch(() => ({}));
+    const contacts = body.contacts as Array<{ email: string; first_name?: string }>;
+    if (!Array.isArray(contacts) || contacts.length === 0) {
+      return NextResponse.json({ error: 'No contacts provided' }, { status: 400 });
+    }
 
-  let query = sb.from('contacts').select('id, email, first_name, created_at', { count: 'exact' }).eq('user_id', user.id);
+    const unique = new Map();
+    let invalidCount = 0;
 
-  // Agar campaign_id hai, toh sirf usi campaign ke contacts gino
-  if (campaignId) {
-    query = query.eq('campaign_id', campaignId);
-  } else {
-    // Warna global contacts gino
-    query = query.is('campaign_id', null);
+    contacts.forEach(c => {
+      const e = String(c.email || '').trim().toLowerCase();
+      if (emailSchema.safeParse(e).success) {
+        unique.set(e, { 
+          user_id: user.id, 
+          campaign_id: params.id, 
+          email: e, 
+          first_name: c.first_name || null 
+        });
+      } else {
+        invalidCount++;
+      }
+    });
+
+    const valid = Array.from(unique.values());
+    let inserted = 0;
+
+    if (valid.length > 0) {
+      for (let i = 0; i < valid.length; i += 500) {
+        const chunk = valid.slice(i, i + 500);
+        // ON CONFLICT ensures duplicates aren't added
+        const { error, count } = await admin.from('contacts').upsert(chunk, { 
+          onConflict: 'campaign_id,email', 
+          ignoreDuplicates: true, 
+          count: 'exact' 
+        });
+        if (!error) inserted += count ?? 0;
+      }
+    }
+
+    const { count: totalCount } = await admin.from('contacts').select('id', { count: 'exact', head: true }).eq('campaign_id', params.id);
+
+    return NextResponse.json({ ok: true, inserted, invalidCount, totalCount: totalCount || 0 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
-
-  if (isCount) {
-    const { count, error } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ count: count || 0 });
-  }
-
-  // Normal list fetch
-  const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data ?? []);
 }
