@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 export default function DashboardPage() {
   const [m, setM] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
+  const [duplicates, setDuplicates] = useState<any[]>([]);
 
   useEffect(() => {
     const load = () => {
@@ -12,9 +13,10 @@ export default function DashboardPage() {
       fetch('/api/dashboard/logs', { cache: 'no-store' }).then(r => r.json()).then(data => {
         if (Array.isArray(data)) setHistory(data); else setHistory([]);
       }).catch(() => setHistory([]));
+      fetch('/api/dashboard/duplicates', { cache: 'no-store' }).then(r => r.json()).then(setDuplicates).catch(() => {});
     };
     load();
-    const t = setInterval(load, 3000); 
+    const t = setInterval(load, 5000); 
     return () => clearInterval(t);
   }, []);
 
@@ -43,32 +45,56 @@ export default function DashboardPage() {
           <div>
             <h3 style={{ margin: '0 0 4px', fontSize: 18, color: '#fff' }}>Sender Capacity</h3>
           </div>
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>SENDERS</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.active_senders}/{m.total_senders}</div></div>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>USED</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.used_today}</div></div>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>REMAINING</p><div style={{ fontSize: 20, fontWeight: 700, color: '#86EFAC' }}>{m.remaining_today}</div></div>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>LIMIT</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.total_capacity}</div></div>
+          <div style={{ display: 'flex', gap: 30, flexWrap: 'wrap' }}>
+            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>SENDERS</p><div style={{ fontSize: 22, fontWeight: 700 }}>{m.active_senders}/{m.total_senders}</div></div>
+            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>USED</p><div style={{ fontSize: 22, fontWeight: 700 }}>{m.used_today}</div></div>
+            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>REMAINING</p><div style={{ fontSize: 22, fontWeight: 700, color: '#86EFAC' }}>{m.remaining_today}</div></div>
+            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>LIMIT</p><div style={{ fontSize: 22, fontWeight: 700 }}>{m.total_capacity}</div></div>
           </div>
         </div>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>Live Send Logs</h2>
+      <div className="grid-2" style={{ marginBottom: 24 }}>
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+            <h2 style={{ margin: 0, fontSize: 16 }}>Live Send Logs</h2>
+          </div>
+          <div className="terminal-box" style={{ height: 350 }}>
+            {history.length === 0 ? (
+              <div>Waiting for emails...</div>
+            ) : (
+              history.map((h) => (
+                <div key={h.id} style={{ marginBottom: 6 }}>
+                  <span style={{ color: '#888' }}>[{new Date(h.created_at).toLocaleTimeString()}]</span>{' '}
+                  <span style={{ color: '#eab308' }}>[{h.campaign_name || 'Unknown'}]</span>{' '}
+                  <span style={{ color: '#00bfff' }}>{h.sender_email}</span>{' '}
+                  <span style={{ color: '#00ff00' }}>-&gt; {h.to_email}</span>{' '}
+                  <span style={{ color: h.status === 'failed' ? '#ff4444' : '#00ff00' }}>[{h.status.toUpperCase()}]</span>
+                </div>
+              ))
+            )}
+          </div>
         </div>
-        <div className="terminal-box">
-          {history.length === 0 ? (
-            <div>Waiting for emails...</div>
+
+        <div className="card">
+          <h2 style={{ margin: '0 0 16px', fontSize: 16 }}>⚠️ Duplicate Sends Tracker</h2>
+          <p style={{ fontSize: 13, color: '#64748B', marginBottom: 16 }}>Emails that received the same message multiple times.</p>
+          {duplicates.length === 0 ? (
+            <div style={{ padding: 20, background: '#F8FAFC', textAlign: 'center', borderRadius: 8, color: '#64748B' }}>No duplicate emails found. Perfect!</div>
           ) : (
-            history.map((h) => (
-              <div key={h.id} style={{ marginBottom: 6, lineHeight: 1.5 }}>
-                <span style={{ color: '#888' }}>[{new Date(h.created_at).toLocaleTimeString()}]</span>{' '}
-                <span style={{ color: '#eab308' }}>[{h.campaign_name || 'Unknown'}]</span>{' '}
-                <span style={{ color: '#00bfff' }}>{h.sender_email}</span>{' '}
-                <span style={{ color: '#00ff00' }}>-&gt; {h.to_email}</span>{' '}
-                <span style={{ color: h.status === 'failed' ? '#ff4444' : '#00ff00' }}>[{h.status.toUpperCase()}]</span>
-              </div>
-            ))
+            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+              <table className="table" style={{ fontSize: 13 }}>
+                <thead><tr><th>Email</th><th>Times Sent</th></tr></thead>
+                <tbody>
+                  {duplicates.map(d => (
+                    <tr key={d.email}>
+                      <td style={{ fontWeight: 500 }}>{d.email}</td>
+                      <td><span className="badge badge-err">{d.count} times</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

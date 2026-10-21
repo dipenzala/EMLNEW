@@ -127,7 +127,7 @@ export default function CampaignDetail() {
       }
 
       if (totalNew === 0 && totalInvalid === 0) {
-        push('⚠️ 0 new contacts. All emails already exist in this campaign.');
+        push('⚠️ 0 new contacts. All emails already exist. Delete this campaign to start fresh.');
       } else if (totalNew === 0 && totalInvalid > 0) {
         push(`❌ 0 imported. ${totalInvalid} invalid emails found.`);
       } else {

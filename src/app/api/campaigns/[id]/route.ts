@@ -28,9 +28,18 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const user = await requireUser();
   const admin = createSupabaseAdmin();
+  
+  // Verify ownership
   const { data: owned } = await admin.from('campaigns').select('id').eq('id', params.id).eq('user_id', user.id).maybeSingle();
   if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 });
+
+  // Force delete related jobs and contacts first (to avoid foreign key errors)
+  await admin.from('email_jobs').delete().eq('campaign_id', params.id);
+  await admin.from('contacts').delete().eq('campaign_id', params.id);
+  
+  // Finally delete the campaign
   const { error } = await admin.from('campaigns').delete().eq('id', params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  
   return NextResponse.json({ ok: true });
 }
