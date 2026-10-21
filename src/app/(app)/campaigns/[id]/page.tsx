@@ -130,10 +130,10 @@ export default function CampaignDetail() {
     let totalInvalid = 0;
 
     try {
-      for (let i = 0; i < mapped.length; i += 2000) {
-        const chunk = mapped.slice(i, i + 2000);
-        setUploadProgress(`Importing ${Math.min(i + 2000, mapped.length)} / ${mapped.length}...`);
-        setImportLogs(prev => [...prev, `[Upload] Sending chunk ${i/2000 + 1} (${chunk.length} rows)...`]);
+      for (let i = 0; i < mapped.length; i += 500) {
+        const chunk = mapped.slice(i, i + 500);
+        setUploadProgress(`Importing ${Math.min(i + 500, mapped.length)} / ${mapped.length}...`);
+        setImportLogs(prev => [...prev, `[Upload] Sending batch ${i/500 + 1} (${chunk.length} rows)...`]);
         
         const r = await fetch(`/api/campaigns/${id}/contacts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contacts: chunk }) });
         if (!r.ok) throw new Error('Chunk failed');
@@ -143,7 +143,7 @@ export default function CampaignDetail() {
         finalTotal = j.totalCount || 0;
         totalInvalid += (j.invalidCount || 0);
         
-        setImportLogs(prev => [...prev, `[Upload] Chunk ${i/2000 + 1} saved. Added: ${j.inserted}, Total: ${j.totalCount}`]);
+        setImportLogs(prev => [...prev, `[Upload] Batch ${i/500 + 1} saved. Added: ${j.inserted}, Total: ${j.totalCount}`]);
       }
 
       if (totalNew === 0 && totalInvalid === 0) {
