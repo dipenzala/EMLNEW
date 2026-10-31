@@ -5,9 +5,15 @@ import { useEffect, useRef, useState } from 'react';
 export default function DashboardPage() {
   const [m, setM] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const [autoMode, setAutoMode] = useState(false);
+  const [autoMode, setAutoMode] = useState<boolean>(false);
   const [statusText, setStatusText] = useState('');
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const isProcessingRef = useRef(false);
+
+  // Load Auto-Mode state on mount
+  useEffect(() => {
+    const savedMode = localStorage.getItem('certwinx_auto_mode');
+    if (savedMode === 'true') setAutoMode(true);
+  }, []);
 
   async function loadStats() {
     try {
@@ -21,34 +27,41 @@ export default function DashboardPage() {
   }
 
   async function triggerGlobalProcess() {
-    setStatusText('Processing...');
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+    
+    if (!autoMode) setStatusText('Processing...');
     try {
       const r = await fetch('/api/global-process', { method: 'POST' });
       const j = await r.json();
       if (r.ok) {
-        setStatusText(`✅ Processed: Sent ${j.totalSent}, Retried: ${j.totalFailed}`);
+        setStatusText(`✅ Sent ${j.totalSent} emails | Retried: ${j.totalFailed}`);
         loadStats();
       } else {
         setStatusText(`❌ Error: ${j.error}`);
       }
     } catch (e) {
-      setStatusText('❌ Network Error');
+      setStatusText('⚠️ Network Error (Retrying...)');
+    } finally {
+      isProcessingRef.current = false;
     }
   }
 
-  // Handle Auto-Mode ON/OFF
+  // Auto-Mode Logic (15 seconds interval)
   useEffect(() => {
     if (autoMode) {
-      triggerGlobalProcess(); // Trigger immediately
-      timerRef.current = setInterval(() => {
-        triggerGlobalProcess(); // Trigger every 5 minutes
-      }, 5 * 60 * 1000);
-      setStatusText('Auto-Mode ON: Checking every 5 minutes...');
+      localStorage.setItem('certwinx_auto_mode', 'true');
+      triggerGlobalProcess();
+      
+      const interval = setInterval(() => {
+        triggerGlobalProcess();
+      }, 15000); // 🔥 15 Seconds
+
+      return () => clearInterval(interval);
     } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setStatusText('Auto-Mode OFF');
+      localStorage.setItem('certwinx_auto_mode', 'false');
+      if (!isProcessingRef.current) setStatusText('Auto-Mode OFF');
     }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [autoMode]);
 
   useEffect(() => { 
@@ -71,14 +84,14 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 🔥 NEW: Auto-Send & Retry Control Panel */}
+      {/* Auto-Send Control Panel */}
       <div className="card" style={{ marginBottom: 24, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
             <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Global Auto-Send & Retry</h3>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Auto-retries failed emails and sends queued emails every 5 mins.</p>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends queued emails and auto-retries failures every 15 seconds.</p>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span>
             <button 
               className={`btn ${autoMode ? 'btn-danger' : 'btn-primary'}`} 
