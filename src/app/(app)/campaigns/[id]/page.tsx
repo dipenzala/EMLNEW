@@ -64,22 +64,6 @@ export default function CampaignDetail() {
     loadLiveStats();
   }
 
-  async function stopCampaign() {
-    if (!confirm('Stop campaign? Queued emails will be cancelled.')) return;
-    setBusy(true);
-    await fetch(`/api/campaigns/${id}/action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
-    setBusy(false);
-    push('Stopped 🛑'); loadCampaign(); loadLiveStats();
-  }
-
-  async function deleteCampaign() {
-    if (!confirm('🚨 Delete this campaign?')) return;
-    setBusy(true);
-    const r = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
-    setBusy(false);
-    if (r.ok) { push('Deleted'); router.push('/campaigns'); }
-  }
-
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -115,7 +99,6 @@ export default function CampaignDetail() {
     let finalTotal = 0;
 
     try {
-      // Send in batches of 1000
       for (let i = 0; i < mapped.length; i += 1000) {
         const chunk = mapped.slice(i, i + 1000);
         setUploadProgress(`Importing & Queuing ${Math.min(i + 1000, mapped.length)} / ${mapped.length}...`);
@@ -131,12 +114,10 @@ export default function CampaignDetail() {
         finalTotal = j.totalCount || 0;
       }
 
-      push(`✅ ${totalNew} new imported. Total in campaign: ${finalTotal}. Auto-queue started!`);
+      push(`✅ ${totalNew} new imported. Total: ${finalTotal}. Auto-queue started!`);
       setImportData(null); 
       loadLiveStats();
-      
-      // Auto-trigger sending immediately
-      await processManualQueue();
+      await processManualQueue(); // Automatically start sending
       
     } catch (err: any) { push(err.message || 'Import failed.'); }
     finally { setUploadProgress(''); setMappingBusy(false); }
@@ -153,8 +134,6 @@ export default function CampaignDetail() {
           {progress?.queued > 0 && (
             <button className="btn" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 'bold' }} onClick={processManualQueue} disabled={busy}>▶ Auto-Send</button>
           )}
-          <button className="btn" style={{ background: '#FEF3C7', color: '#92400E' }} onClick={stopCampaign} disabled={busy}>🛑 Stop</button>
-          <button className="btn btn-danger" onClick={deleteCampaign} disabled={busy}>🗑 Delete</button>
         </div>
       </div>
 
