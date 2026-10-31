@@ -5,14 +5,15 @@ import { processBatch } from '@/lib/queue';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-export async function POST(req: Request) {
+export async function POST() {
   const user = await requireUser();
   if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') return NextResponse.json({ error: 'Global sending disabled.' }, { status: 400 });
 
   try { 
-    // 🔥 Increased Batch Size to 200 for 20x Concurrency
-    const result = await processBatch(user.id, 200); 
+    // 🔥 Reduce batch size to 25 to avoid 60s timeout
+    const result = await processBatch(user.id, 25); 
     
+    // Auto-trigger next batch in background (chain)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     const secret = process.env.CRON_SECRET;
     if (appUrl && secret) {

@@ -58,10 +58,26 @@ export default function CampaignDetail() {
 
   async function processManualQueue() {
     setBusy(true);
-    await fetch('/api/process-batch', { method: 'POST' });
+    push('⚡ Auto-sending started in background...');
+    
+    let hasMore = true;
+    while (hasMore) {
+      const r = await fetch('/api/process-batch', { method: 'POST' });
+      if (!r.ok) { hasMore = false; break; }
+      const j = await r.json();
+      
+      // Refresh stats on screen
+      loadLiveStats();
+      
+      // If nothing was claimed or queue is empty, stop looping
+      if (j.claimed === 0) hasMore = false;
+      
+      // Small delay before next batch
+      await new Promise(res => setTimeout(res, 2000));
+    }
+    
     setBusy(false);
-    push('⚡ Sending started!');
-    loadLiveStats();
+    push('✅ All queued emails processed!');
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
