@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_OPTIONS='--no-deprecation' next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

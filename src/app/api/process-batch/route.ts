@@ -3,16 +3,17 @@ import { requireUser } from '@/lib/auth';
 import { processBatch } from '@/lib/queue';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 10; // Vercel Hobby plan limit
 
 export async function POST() {
   const user = await requireUser();
   if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') return NextResponse.json({ error: 'Global sending disabled.' }, { status: 400 });
 
   try { 
-    // 🔥 Increased Batch Size to 50 (30 parallel emails at a time)
-    const result = await processBatch(user.id, 50); 
+    // 🔥 Process only 10 emails per request to prevent timeout
+    const result = await processBatch(user.id, 10); 
     
+    // Auto-trigger next batch in background (chain)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     const secret = process.env.CRON_SECRET;
     if (appUrl && secret) {
