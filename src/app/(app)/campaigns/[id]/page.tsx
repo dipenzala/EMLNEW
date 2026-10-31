@@ -62,18 +62,24 @@ export default function CampaignDetail() {
     
     let hasMore = true;
     while (hasMore) {
-      const r = await fetch('/api/process-batch', { method: 'POST' });
-      if (!r.ok) { hasMore = false; break; }
-      const j = await r.json();
-      
-      // Refresh stats on screen
-      loadLiveStats();
-      
-      // If nothing was claimed or queue is empty, stop looping
-      if (j.claimed === 0) hasMore = false;
-      
-      // Small delay before next batch
-      await new Promise(res => setTimeout(res, 2000));
+      try {
+        const r = await fetch('/api/process-batch', { method: 'POST' });
+        if (!r.ok) throw new Error('Batch failed');
+        
+        const j = await r.json();
+        
+        // If nothing was claimed, wait a bit and check again. If queue is empty, stop.
+        if (j.claimed === 0) {
+          await new Promise(res => setTimeout(res, 5000));
+          const stats = await fetch(`/api/campaigns/${id}/progress`).then(res => res.json());
+          if (stats.queued === 0) hasMore = false;
+        }
+        
+        loadLiveStats();
+        await new Promise(res => setTimeout(res, 1000));
+      } catch (e) {
+        hasMore = false;
+      }
     }
     
     setBusy(false);

@@ -8,20 +8,17 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const user = await requireUser();
   const sb = createSupabaseServer();
   
-  const { data, error } = await sb.from('email_jobs')
-    .select('status')
-    .eq('campaign_id', params.id)
-    .eq('user_id', user.id);
+  const query = () => sb.from('email_jobs').select('*', { count: 'exact', head: true }).eq('campaign_id', params.id).eq('user_id', user.id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  
-  const counts: Record<string, number> = { total: 0, queued: 0, accepted: 0, failed: 0 };
-  for (const row of data || []) {
-    counts.total++;
-    if (row.status === 'queued' || row.status === 'processing') counts.queued++;
-    else if (row.status === 'accepted') counts.accepted++;
-    else if (row.status === 'failed' || row.status === 'uncertain') counts.failed++;
-  }
-  
-  return NextResponse.json(counts);
+  const { count: total } = await query();
+  const { count: queued } = await query().eq('status', 'queued');
+  const { count: accepted } = await query().eq('status', 'accepted');
+  const { count: failed } = await query().eq('status', 'failed');
+
+  return NextResponse.json({ 
+    total: total || 0, 
+    queued: queued || 0, 
+    accepted: accepted || 0, 
+    failed: failed || 0 
+  });
 }
