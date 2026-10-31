@@ -7,23 +7,24 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   await requireUser();
   const admin = createSupabaseAdmin();
-  const todayStart = new Date(new Date().setHours(0,0,0,0)).toISOString();
+  
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istTime = new Date(now.getTime() + istOffset);
+  istTime.setUTCHours(0, 0, 0, 0);
+  const todayStart = new Date(istTime.getTime() - istOffset).toISOString();
 
   const { data: senders } = await admin.from('sender_accounts').select('*').order('created_at', { ascending: false });
   if (!senders) return NextResponse.json({ senders: [], globalStats: {} });
 
-  // Fetch accepted jobs today to calculate accurate usage per sender
-  const { data: jobs } = await admin.from('email_jobs')
-    .select('sender_account_id')
-    .eq('status', 'accepted')
-    .gte('accepted_at', todayStart);
+  const { data: events } = await admin.from('send_events').select('sender_account_id').eq('kind', 'accepted').gte('created_at', todayStart);
 
   const statsMap: Record<string, { today: number }> = {};
   senders.forEach(s => { statsMap[s.id] = { today: 0 }; });
 
-  jobs?.forEach(j => {
-    if (j.sender_account_id && statsMap[j.sender_account_id]) {
-      statsMap[j.sender_account_id].today++;
+  events?.forEach(e => {
+    if (e.sender_account_id && statsMap[e.sender_account_id]) {
+      statsMap[e.sender_account_id].today++;
     }
   });
 
