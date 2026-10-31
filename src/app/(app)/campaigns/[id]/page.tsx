@@ -99,16 +99,19 @@ export default function CampaignDetail() {
     let finalTotal = 0;
 
     try {
-      for (let i = 0; i < mapped.length; i += 1000) {
-        const chunk = mapped.slice(i, i + 1000);
-        setUploadProgress(`Importing & Queuing ${Math.min(i + 1000, mapped.length)} / ${mapped.length}...`);
+      for (let i = 0; i < mapped.length; i += 500) {
+        const chunk = mapped.slice(i, i + 500);
+        setUploadProgress(`Importing & Queuing ${Math.min(i + 500, mapped.length)} / ${mapped.length}...`);
         
         const r = await fetch(`/api/campaigns/${id}/contacts`, { 
           method: 'POST', headers: { 'content-type': 'application/json' }, 
           body: JSON.stringify({ contacts: chunk }) 
         });
         
-        if (!r.ok) throw new Error('Server error during chunk import');
+        if (!r.ok) {
+          const errData = await r.json().catch(() => ({}));
+          throw new Error(errData.error || 'Server error during chunk import');
+        }
         const j = await r.json();
         totalNew += (j.inserted || 0);
         finalTotal = j.totalCount || 0;

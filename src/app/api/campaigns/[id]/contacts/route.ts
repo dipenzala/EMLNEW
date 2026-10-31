@@ -26,19 +26,29 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
 
     const valid = Array.from(unique.values());
-    if (valid.length === 0) return NextResponse.json({ ok: true, inserted: 0, invalidCount, totalCount: 0, queued: 0 });
+    if (valid.length === 0) {
+      return NextResponse.json({ ok: true, inserted: 0, invalidCount, totalCount: 0, queued: 0 });
+    }
 
     // Insert Contacts
     const { data: insertedCount, error: insertError } = await admin.rpc('bulk_insert_campaign_contacts', {
       p_user_id: user.id, p_campaign_id: params.id, p_contacts: valid
     });
-    if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
+    
+    if (insertError) {
+      console.error("Contacts Insert Error:", insertError);
+      return NextResponse.json({ error: `Database Error: ${insertError.message}` }, { status: 500 });
+    }
 
-    // 🔥 AUTO-QUEUE: Instantly move to Email Jobs
+    // Auto-Queue
     const { data: queuedCount, error: queueError } = await admin.rpc('enqueue_campaign_jobs_bulk', {
       p_campaign_id: params.id, p_user_id: user.id, p_sender_id: null
     });
-    if (queueError) console.error("Queue Error:", queueError);
+    
+    if (queueError) {
+      console.error("Queue Error:", queueError);
+      return NextResponse.json({ ok: true, inserted: insertedCount || 0, invalidCount, totalCount: 0, queued: 0, warning: "Queue failed: " + queueError.message });
+    }
 
     await admin.from('campaigns').update({ status: 'running' }).eq('id', params.id);
 
@@ -46,6 +56,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     return NextResponse.json({ ok: true, inserted: insertedCount || 0, invalidCount, totalCount: totalCount || 0, queued: queuedCount || 0 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("API Error:", err);
+    return NextResponse.json({ error: `Server Error: ${err.message}` }, { status: 500 });
   }
 }
