@@ -76,7 +76,7 @@ export default function CampaignDetail() {
         }
         
         loadLiveStats();
-        await new Promise(res => setTimeout(res, 1000));
+        await new Promise(res => setTimeout(res, 200));
       } catch (e) {
         hasMore = false;
       }
