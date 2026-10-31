@@ -1,23 +1,60 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function DashboardPage() {
   const [m, setM] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const [duplicates, setDuplicates] = useState<any[]>([]);
+  const [autoMode, setAutoMode] = useState(false);
+  const [statusText, setStatusText] = useState('');
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  async function loadStats() {
+    try {
+      const [r1, r2] = await Promise.all([
+        fetch('/api/dashboard', { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/dashboard/logs', { cache: 'no-store' }).then(r => r.json())
+      ]);
+      setM(r1);
+      if (Array.isArray(r2)) setHistory(r2);
+    } catch (e) {}
+  }
+
+  async function triggerGlobalProcess() {
+    setStatusText('Processing...');
+    try {
+      const r = await fetch('/api/global-process', { method: 'POST' });
+      const j = await r.json();
+      if (r.ok) {
+        setStatusText(`✅ Processed: Sent ${j.totalSent}, Retried: ${j.totalFailed}`);
+        loadStats();
+      } else {
+        setStatusText(`❌ Error: ${j.error}`);
+      }
+    } catch (e) {
+      setStatusText('❌ Network Error');
+    }
+  }
+
+  // Handle Auto-Mode ON/OFF
   useEffect(() => {
-    const load = () => {
-      fetch('/api/dashboard', { cache: 'no-store' }).then(r => r.json()).then(setM).catch(() => {});
-      fetch('/api/dashboard/logs', { cache: 'no-store' }).then(r => r.json()).then(data => {
-        if (Array.isArray(data)) setHistory(data); else setHistory([]);
-      }).catch(() => setHistory([]));
-      fetch('/api/dashboard/duplicates', { cache: 'no-store' }).then(r => r.json()).then(setDuplicates).catch(() => {});
-    };
-    load();
-    const t = setInterval(load, 5000); 
-    return () => clearInterval(t);
+    if (autoMode) {
+      triggerGlobalProcess(); // Trigger immediately
+      timerRef.current = setInterval(() => {
+        triggerGlobalProcess(); // Trigger every 5 minutes
+      }, 5 * 60 * 1000);
+      setStatusText('Auto-Mode ON: Checking every 5 minutes...');
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setStatusText('Auto-Mode OFF');
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [autoMode]);
+
+  useEffect(() => { 
+    loadStats(); 
+    const t = setInterval(loadStats, 5000); 
+    return () => clearInterval(t); 
   }, []);
 
   if (!m) return <div className="skeleton" style={{ height: 200 }} />;
@@ -34,39 +71,54 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* 🔥 NEW: Auto-Send & Retry Control Panel */}
+      <div className="card" style={{ marginBottom: 24, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Global Auto-Send & Retry</h3>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Auto-retries failed emails and sends queued emails every 5 mins.</p>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span>
+            <button 
+              className={`btn ${autoMode ? 'btn-danger' : 'btn-primary'}`} 
+              onClick={() => setAutoMode(!autoMode)}
+            >
+              {autoMode ? '🛑 Stop Auto-Mode' : '▶ Start Auto-Mode'}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="grid-4" style={{ marginBottom: 20 }}>
         {[['Campaigns', m.campaigns],['Queued', m.queued],['Accepted', m.sent],['Failed', m.failed]].map(([k, v]) => (
           <div className="card" key={k as string}><p className="card-title">{k}</p><div className="metric">{v as number}</div></div>
         ))}
       </div>
 
-      <div className="card" style={{ marginBottom: 24, background: 'linear-gradient(135deg, #1C83F3 0%, #0F2E6E 100%)', color: '#fff' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
-          <div>
+      <div className="grid-2" style={{ marginBottom: 24 }}>
+        <div className="card" style={{ background: 'linear-gradient(135deg, #1C83F3 0%, #0F2E6E 100%)', color: '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 18, color: '#fff' }}>Sender Capacity</h3>
           </div>
-          <div style={{ display: 'flex', gap: 30, flexWrap: 'wrap' }}>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>SENDERS</p><div style={{ fontSize: 22, fontWeight: 700 }}>{m.active_senders}/{m.total_senders}</div></div>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>USED</p><div style={{ fontSize: 22, fontWeight: 700 }}>{m.used_today}</div></div>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>REMAINING</p><div style={{ fontSize: 22, fontWeight: 700, color: '#86EFAC' }}>{m.remaining_today}</div></div>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>LIMIT</p><div style={{ fontSize: 22, fontWeight: 700 }}>{m.total_capacity}</div></div>
+          <div style={{ display: 'flex', gap: 20, marginTop: 15, flexWrap: 'wrap' }}>
+            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>SENDERS</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.active_senders}/{m.total_senders}</div></div>
+            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>USED</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.used_today}</div></div>
+            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>REMAINING</p><div style={{ fontSize: 20, fontWeight: 700, color: '#86EFAC' }}>{m.remaining_today}</div></div>
           </div>
         </div>
-      </div>
 
-      <div className="grid-2" style={{ marginBottom: 24 }}>
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
             <h2 style={{ margin: 0, fontSize: 16 }}>Live Send Logs</h2>
           </div>
-          <div className="terminal-box" style={{ height: 350 }}>
+          <div className="terminal-box" style={{ height: 200 }}>
             {history.length === 0 ? (
               <div>Waiting for emails...</div>
             ) : (
               history.map((h) => (
-                <div key={h.id} style={{ marginBottom: 6 }}>
+                <div key={h.id} style={{ marginBottom: 4 }}>
                   <span style={{ color: '#888' }}>[{new Date(h.created_at).toLocaleTimeString()}]</span>{' '}
-                  <span style={{ color: '#eab308' }}>[{h.campaign_name || 'Unknown'}]</span>{' '}
                   <span style={{ color: '#00bfff' }}>{h.sender_email}</span>{' '}
                   <span style={{ color: '#00ff00' }}>-&gt; {h.to_email}</span>{' '}
                   <span style={{ color: h.status === 'failed' ? '#ff4444' : '#00ff00' }}>[{h.status.toUpperCase()}]</span>
@@ -74,28 +126,6 @@ export default function DashboardPage() {
               ))
             )}
           </div>
-        </div>
-
-        <div className="card">
-          <h2 style={{ margin: '0 0 16px', fontSize: 16 }}>⚠️ Duplicate Sends Tracker</h2>
-          <p style={{ fontSize: 13, color: '#64748B', marginBottom: 16 }}>Emails that received the same message multiple times.</p>
-          {duplicates.length === 0 ? (
-            <div style={{ padding: 20, background: '#F8FAFC', textAlign: 'center', borderRadius: 8, color: '#64748B' }}>No duplicate emails found. Perfect!</div>
-          ) : (
-            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-              <table className="table" style={{ fontSize: 13 }}>
-                <thead><tr><th>Email</th><th>Times Sent</th></tr></thead>
-                <tbody>
-                  {duplicates.map(d => (
-                    <tr key={d.email}>
-                      <td style={{ fontWeight: 500 }}>{d.email}</td>
-                      <td><span className="badge badge-err">{d.count} times</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       </div>
     </div>
