@@ -10,7 +10,8 @@ export async function POST() {
   if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') return NextResponse.json({ error: 'Global sending disabled.' }, { status: 400 });
 
   try { 
-    const result = await processBatch(user.id, 20); 
+    // Process 10 emails per request to ensure it finishes under 10s (Vercel Hobby limit)
+    const result = await processBatch(user.id, 10); 
     return NextResponse.json(result); 
   }
   catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 }); }
