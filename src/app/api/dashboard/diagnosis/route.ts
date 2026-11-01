@@ -8,9 +8,9 @@ export async function GET() {
   await requireUser();
   const admin = createSupabaseAdmin();
   
-  // Find jobs that have a recorded error, regardless of current status
   const { data } = await admin.from('email_jobs')
     .select('to_email, status, last_error, attempts, created_at')
+    .eq('status', 'failed')
     .not('last_error', 'is', null)
     .order('updated_at', { ascending: false })
     .limit(5);

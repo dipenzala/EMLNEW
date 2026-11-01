@@ -10,22 +10,8 @@ export async function sendViaSender(senderId: string, msg: any) {
 
   msg.from = `Startup India Certificate <${sender.google_email}>`;
 
-  // 🔥 SMART ROUTING: Use SMTP if password exists, else use OAuth
-  if (sender.smtp_password_enc) {
-    const pass = decrypt(sender.smtp_password_enc);
-    const transport = nodemailer.createTransport({
-      host: sender.smtp_host || 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: { user: sender.smtp_user || sender.google_email, pass },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-      tls: { rejectUnauthorized: false }
-    });
-    const info = await transport.sendMail({ from: msg.from, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text });
-    return info.messageId;
-  } else if (sender.refresh_token_enc) {
+  // SMART ROUTING: If OAuth exists, use API. Else fallback to SMTP.
+  if (sender.refresh_token_enc) {
     const client = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
     client.setCredentials({ refresh_token: decrypt(sender.refresh_token_enc) });
     const gmail = google.gmail({ version: 'v1', auth: client });
@@ -41,9 +27,28 @@ export async function sendViaSender(senderId: string, msg: any) {
       msg.html
     ].join('\r\n');
     
+    // Gmail API sends via HTTP (Allowed on Vercel)
     const res = await gmail.users.messages.send({ userId: 'me', requestBody: { raw: Buffer.from(str).toString('base64url') } });
     return res.data.id;
+  } else if (sender.smtp_password_enc) {
+    const pass = decrypt(sender.smtp_password_enc);
+    const transport = nodemailer.createTransport({
+      host: sender.smtp_host || 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      auth: { user: sender.smtp_user || sender.google_email, pass },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
+    });
+    
+    // Force timeout in 5 seconds so Vercel doesn't hang
+    const mailPromise = transport.sendMail({ from: msg.from, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP_CONNECTION_TIMEOUT')), 5000));
+    
+    const info: any = await Promise.race([mailPromise, timeoutPromise]);
+    return info.messageId;
   } else {
-    throw new Error('Sender has no valid credentials (no SMTP password and no OAuth token)');
+    throw new Error('No credentials found for this sender.');
   }
 }
