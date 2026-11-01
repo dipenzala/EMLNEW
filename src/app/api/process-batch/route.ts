@@ -10,8 +10,8 @@ export async function POST() {
   if ((process.env.GLOBAL_SENDING_ENABLED ?? 'false') !== 'true') return NextResponse.json({ error: 'Global sending disabled.' }, { status: 400 });
 
   try { 
-    // 🔥 PROCESS 50 EMAILS AT A TIME
-    const result = await processBatch(user.id, 50); 
+    // 🔥 SAFE BATCH: Only process 10 emails per request
+    const result = await processBatch(user.id, 10); 
     return NextResponse.json(result); 
   }
   catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 }); }

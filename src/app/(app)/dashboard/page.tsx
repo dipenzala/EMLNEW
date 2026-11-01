@@ -88,8 +88,8 @@ export default function DashboardPage() {
       <div className="card" style={{ marginBottom: 24, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Bulk Auto-Send (50 per batch)</h3>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends 50 emails every 3 seconds automatically. Keep this tab open.</p>
+            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Bulk Auto-Send (10 per batch)</h3>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends 10 emails safely every 3 seconds. Keep this tab open.</p>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span>
