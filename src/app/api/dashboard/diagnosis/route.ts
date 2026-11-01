@@ -8,11 +8,11 @@ export async function GET() {
   await requireUser();
   const admin = createSupabaseAdmin();
   
-  // Get the latest 5 errors
+  // Find jobs that have a recorded error, regardless of current status
   const { data } = await admin.from('email_jobs')
     .select('to_email, status, last_error, attempts, created_at')
-    .in('status', ['failed', 'uncertain'])
-    .order('created_at', { ascending: false })
+    .not('last_error', 'is', null)
+    .order('updated_at', { ascending: false })
     .limit(5);
 
   return NextResponse.json(data || []);

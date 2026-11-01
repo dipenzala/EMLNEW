@@ -9,17 +9,15 @@ export async function POST() {
   try {
     const admin = createSupabaseAdmin();
     
-    // 1. Only reset stuck processing jobs (NOT failed jobs)
-    await admin.rpc('reset_stuck_jobs');
+    // 1. ONLY reset jobs that have been stuck in 'processing' for more than 5 minutes (Vercel killed them)
+    await admin.rpc('reset_stuck_jobs'); 
 
-    // 2. Find users with queued emails
     const { data: queuedJobs } = await admin.from('email_jobs').select('user_id').eq('status', 'queued').limit(100);
     const uniqueUsers = [...new Set(queuedJobs?.map(j => j.user_id) || [])];
 
     let totalSent = 0;
     let totalFailed = 0;
 
-    // 3. 🔥 SYNCHRONOUS PROCESSING: Process 10 emails directly (takes ~5-10 secs, no timeout)
     for (const userId of uniqueUsers) {
       const result = await processBatch(userId, 10);
       totalSent += (result.sent || 0);
