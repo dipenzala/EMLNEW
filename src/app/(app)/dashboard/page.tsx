@@ -89,6 +89,17 @@ export default function DashboardPage() {
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span>
+            <button className="btn btn-primary" onClick={async () => {
+              setStatusText('⚡ Forcing all stuck emails...');
+              const r = await fetch('/api/force-send', { method: 'POST' });
+              const j = await r.json();
+              if (r.ok) {
+                setStatusText(`✅ Forced Sent: ${j.totalSent}`);
+                loadStats();
+              } else {
+                setStatusText(`❌ Error: ${j.error}`);
+              }
+            }}>⚡ Force Send</button>
             <button className={`btn ${autoMode ? 'btn-danger' : 'btn-primary'}`} onClick={() => setAutoMode(!autoMode)}>
               {autoMode ? '🛑 Stop Auto-Mode' : '▶ Start Auto-Mode'}
             </button>
