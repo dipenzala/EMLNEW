@@ -55,7 +55,7 @@ export default function DashboardPage() {
       
       const interval = setInterval(() => {
         triggerProcess();
-      }, 3000); // 🔥 3 Seconds (Continuous sending 50 at a time)
+      }, 1000); // 🔥 1 Second Loop (Continuous sending 50 at a time)
 
       return () => clearInterval(interval);
     } else {
@@ -88,8 +88,8 @@ export default function DashboardPage() {
       <div className="card" style={{ marginBottom: 24, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Bulk Auto-Send (10 per batch)</h3>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends 10 emails safely every 3 seconds. Keep this tab open.</p>
+            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Continuous Safe Sender</h3>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends 1 email safely every 1 second. Keep this tab open.</p>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span>
