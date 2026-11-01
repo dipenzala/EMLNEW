@@ -104,7 +104,7 @@ async function processOne(admin: any, job: any): Promise<'sent' | 'failed' | 'sk
   try {
     const messageId = await Promise.race([
       sendViaSender(senderId, { to, from, subject, html, text, unsubscribeUrl: unsubUrl }),
-      new Promise<string>((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000)),
+      new Promise<string>((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
     ]);
     
     await admin.from('email_jobs').update({ status: 'accepted', message_id: messageId, updated_at: new Date().toISOString() }).eq('id', jobId);
