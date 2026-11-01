@@ -6,10 +6,9 @@ export default function DashboardPage() {
   const [m, setM] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [autoMode, setAutoMode] = useState<boolean>(false);
-  const [statusText, setStatusText] = useState('');
+  const [statusText, setStatusText] = useState('Ready');
   const isProcessingRef = useRef(false);
 
-  // Load Auto-Mode state on mount
   useEffect(() => {
     const savedMode = localStorage.getItem('certwinx_auto_mode');
     if (savedMode === 'true') setAutoMode(true);
@@ -26,16 +25,16 @@ export default function DashboardPage() {
     } catch (e) {}
   }
 
-  async function triggerProcess() {
+  async function processNow() {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
     
-    if (!autoMode) setStatusText('Processing 50 emails...');
+    setStatusText('⚡ Processing 20 emails...');
     try {
       const r = await fetch('/api/process-batch', { method: 'POST' });
       const j = await r.json();
       if (r.ok) {
-        setStatusText(`✅ Batch Sent: ${j.sent || 0} | Failed: ${j.failed || 0}`);
+        setStatusText(`✅ Sent: ${j.sent || 0} | Failed: ${j.failed || 0}`);
         loadStats();
       } else {
         setStatusText(`❌ Error: ${j.error}`);
@@ -47,20 +46,17 @@ export default function DashboardPage() {
     }
   }
 
-  // Auto-Mode Logic (Loop every 3 seconds)
+  // Auto-Mode Loop
   useEffect(() => {
     if (autoMode) {
       localStorage.setItem('certwinx_auto_mode', 'true');
-      triggerProcess(); // Trigger immediately
-      
-      const interval = setInterval(() => {
-        triggerProcess();
-      }, 1000); // 🔥 1 Second Loop (Continuous sending 50 at a time)
+      const loop = setInterval(() => {
+        if (!isProcessingRef.current) processNow();
+      }, 5000); // Every 5 seconds
 
-      return () => clearInterval(interval);
+      return () => clearInterval(loop);
     } else {
       localStorage.setItem('certwinx_auto_mode', 'false');
-      if (!isProcessingRef.current) setStatusText('Auto-Mode OFF');
     }
   }, [autoMode]);
 
@@ -76,24 +72,20 @@ export default function DashboardPage() {
     <div>
       <div className="topbar">
         <h1>Overview</h1>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: 13, color: '#64748B' }}>Sending: </span>
-          <span className={`badge ${m.global_enabled ? 'badge-ok' : 'badge-err'}`}>
-            {m.global_enabled ? 'ENABLED' : 'PAUSED'}
-          </span>
-        </div>
+        <span className={`badge ${m.global_enabled ? 'badge-ok' : 'badge-err'}`}>
+          {m.global_enabled ? 'SENDING ENABLED' : 'PAUSED'}
+        </span>
       </div>
 
-      {/* Auto-Send Control Panel */}
+      {/* 🔥 BUTTONS PANEL */}
       <div className="card" style={{ marginBottom: 24, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Continuous Safe Sender</h3>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends 1 email safely every 1 second. Keep this tab open.</p>
+            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Email Sending Control</h3>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Status: <span style={{ fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span></p>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span>
-            <button className="btn btn-primary" onClick={triggerProcess}>⚡ Send 50 Now</button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={processNow} disabled={isProcessingRef.current}>⚡ Send 20 Now</button>
             <button className={`btn ${autoMode ? 'btn-danger' : 'btn-primary'}`} onClick={() => setAutoMode(!autoMode)}>
               {autoMode ? '🛑 Stop Auto-Send' : '▶ Start Auto-Send'}
             </button>
@@ -109,11 +101,9 @@ export default function DashboardPage() {
 
       <div className="grid-2" style={{ marginBottom: 24 }}>
         <div className="card" style={{ background: 'linear-gradient(135deg, #1C83F3 0%, #0F2E6E 100%)', color: '#fff' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: 18, color: '#fff' }}>Sender Capacity</h3>
-          </div>
+          <h3 style={{ margin: '0 0 4px', fontSize: 18, color: '#fff' }}>Sender Capacity</h3>
           <div style={{ display: 'flex', gap: 20, marginTop: 15, flexWrap: 'wrap' }}>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>SENDERS</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.active_senders}/{m.total_senders}</div></div>
+            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>ACTIVE</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.active_senders}/{m.total_senders}</div></div>
             <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>USED TODAY</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.used_today}</div></div>
             <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>REMAINING</p><div style={{ fontSize: 20, fontWeight: 700, color: '#86EFAC' }}>{m.remaining_today}</div></div>
           </div>
@@ -124,18 +114,14 @@ export default function DashboardPage() {
             <h2 style={{ margin: 0, fontSize: 16 }}>Live Send Logs</h2>
           </div>
           <div className="terminal-box" style={{ height: 200 }}>
-            {history.length === 0 ? (
-              <div>Waiting for emails...</div>
-            ) : (
-              history.map((h) => (
-                <div key={h.id} style={{ marginBottom: 4 }}>
-                  <span style={{ color: '#888' }}>[{new Date(h.created_at).toLocaleTimeString()}]</span>{' '}
-                  <span style={{ color: '#00bfff' }}>{h.sender_email}</span>{' '}
-                  <span style={{ color: '#00ff00' }}>-&gt; {h.to_email}</span>{' '}
-                  <span style={{ color: h.status === 'failed' ? '#ff4444' : '#00ff00' }}>[{h.status.toUpperCase()}]</span>
-                </div>
-              ))
-            )}
+            {history.length === 0 ? <div>Waiting for emails...</div> : history.map((h) => (
+              <div key={h.id} style={{ marginBottom: 4 }}>
+                <span style={{ color: '#888' }}>[{new Date(h.created_at).toLocaleTimeString()}]</span>{' '}
+                <span style={{ color: '#00bfff' }}>{h.sender_email}</span>{' '}
+                <span style={{ color: '#00ff00' }}>-&gt; {h.to_email}</span>{' '}
+                <span style={{ color: h.status === 'failed' ? '#ff4444' : '#00ff00' }}>[{h.status.toUpperCase()}]</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
