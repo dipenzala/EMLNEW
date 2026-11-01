@@ -9,7 +9,7 @@ export async function POST() {
   try {
     const admin = createSupabaseAdmin();
     
-    // Reset only 'processing' and 'failed' emails
+    // Reset stuck emails
     await admin.from('email_jobs')
       .update({ status: 'queued', next_attempt_at: new Date().toISOString(), last_error: null, attempts: 0 })
       .in('status', ['processing', 'failed']);
@@ -21,8 +21,8 @@ export async function POST() {
     let totalFailed = 0;
 
     for (const userId of uniqueUsers) {
-      // Process 5 emails per click (Safe from Vercel 10s timeout)
-      const result = await processBatch(userId, 5);
+      // 🔥 PROCESS ONLY 3 EMAILS PER CLICK (Will take ~5 seconds, NO TIMEOUT)
+      const result = await processBatch(userId, 3);
       totalSent += (result.sent || 0);
       totalFailed += (result.failed || 0);
     }
