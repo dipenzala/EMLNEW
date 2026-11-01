@@ -83,6 +83,14 @@ export default function DashboardPage() {
             <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Status: <span style={{ fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span></p>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={async () => {
+              setStatusText('Testing 1 email...');
+              const r = await fetch('/api/test-send', { method: 'POST' });
+              const j = await r.json();
+              if (r.ok) setStatusText('✅ Test Success: ' + j.message);
+              else { setStatusText('❌ Test Failed'); alert('EXACT ERROR:\n' + j.error); }
+              loadStats();
+            }}>🧪 Test 1 Email</button>
             <button className="btn" onClick={processNow} disabled={isProcessingRef.current}>⚡ Send 10 Now</button>
             <button className={`btn ${autoMode ? 'btn-danger' : 'btn-primary'}`} onClick={() => setAutoMode(!autoMode)}>
               {autoMode ? '🛑 Stop Auto-Send' : '▶ Start Auto-Send'}
