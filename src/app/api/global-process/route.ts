@@ -1,31 +1,32 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdmin } from '@/lib/supabase/server';
+import { processBatch } from '@/lib/queue';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function POST() {
   try {
     const admin = createSupabaseAdmin();
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    const secret = process.env.CRON_SECRET;
-
+    
+    // 1. Only reset stuck processing jobs (NOT failed jobs)
     await admin.rpc('reset_stuck_jobs');
-    await admin.from('email_jobs').update({ status: 'queued', next_attempt_at: new Date().toISOString(), last_error: null }).eq('status', 'failed').lt('attempts', 3);
 
+    // 2. Find users with queued emails
     const { data: queuedJobs } = await admin.from('email_jobs').select('user_id').eq('status', 'queued').limit(100);
     const uniqueUsers = [...new Set(queuedJobs?.map(j => j.user_id) || [])];
 
-    if (appUrl && secret) {
-      uniqueUsers.forEach(userId => {
-        fetch(`${appUrl}/api/drain`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
-          body: JSON.stringify({ userId, depth: 0 }),
-        }).catch(() => {});
-      });
+    let totalSent = 0;
+    let totalFailed = 0;
+
+    // 3. 🔥 SYNCHRONOUS PROCESSING: Process 10 emails directly (takes ~5-10 secs, no timeout)
+    for (const userId of uniqueUsers) {
+      const result = await processBatch(userId, 10);
+      totalSent += (result.sent || 0);
+      totalFailed += (result.failed || 0);
     }
 
-    return NextResponse.json({ ok: true, totalSent: 0, totalFailed: 0, message: 'Triggered background' });
+    return NextResponse.json({ ok: true, totalSent, totalFailed });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
