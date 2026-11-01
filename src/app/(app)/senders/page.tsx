@@ -22,6 +22,22 @@ export default function SendersPage() {
   }
   useEffect(() => { load(); }, []);
 
+  async function testSenders() {
+    setBusy(true);
+    push('⏳ Testing all senders...');
+    const r = await fetch('/api/senders/test', { method: 'POST' });
+    const j = await r.json();
+    setBusy(false);
+    if (r.ok) {
+      if (j.failed > 0) {
+        alert(`⚠️ Testing Done!\nWorking: ${j.working}\nFailed: ${j.failed}\n\nFailed Senders:\n${j.failedList.join(', ')}\n\nPlease reconnect them.`);
+      } else {
+        push(`✅ All ${j.working} senders are working perfectly!`);
+      }
+      load();
+    } else push(j.error || 'Test failed');
+  }
+
   async function togglePause(s: any) {
     const r = await fetch(`/api/senders/${s.id}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json' },
