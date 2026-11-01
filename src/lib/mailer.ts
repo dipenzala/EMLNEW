@@ -10,16 +10,26 @@ export async function sendViaSender(senderId: string, msg: any) {
 
   msg.from = `Startup India Certificate <${sender.google_email}>`;
 
-  if (sender.provider === 'hostinger') {
-    const transport = nodemailer.createTransport({ host: sender.smtp_host, port: sender.smtp_port, secure: true, auth: { user: sender.smtp_user, pass: decrypt(sender.smtp_password_enc) } });
+  // 🔥 SMART ROUTING: Use SMTP if password exists, else use OAuth
+  if (sender.smtp_password_enc) {
+    const pass = decrypt(sender.smtp_password_enc);
+    const transport = nodemailer.createTransport({
+      host: sender.smtp_host || 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      auth: { user: sender.smtp_user || sender.google_email, pass },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+      tls: { rejectUnauthorized: false }
+    });
     const info = await transport.sendMail({ from: msg.from, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text });
     return info.messageId;
-  } else {
+  } else if (sender.refresh_token_enc) {
     const client = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
     client.setCredentials({ refresh_token: decrypt(sender.refresh_token_enc) });
     const gmail = google.gmail({ version: 'v1', auth: client });
     
-    // 🔥 FIX: Proper UTF-8 Encoding for Emojis
     const encodedSubject = `=?UTF-8?B?${Buffer.from(msg.subject, 'utf8').toString('base64')}?=`;
     const str = [
       `To: ${msg.to}`, 
@@ -33,5 +43,7 @@ export async function sendViaSender(senderId: string, msg: any) {
     
     const res = await gmail.users.messages.send({ userId: 'me', requestBody: { raw: Buffer.from(str).toString('base64url') } });
     return res.data.id;
+  } else {
+    throw new Error('Sender has no valid credentials (no SMTP password and no OAuth token)');
   }
 }
