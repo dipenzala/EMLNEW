@@ -89,8 +89,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
             <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Global Auto-Send & Retry</h3>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends queued emails and auto-retries failures every 15 seconds.</p>
-          </div>
+<p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends queued emails every 15s. <b>Tab band hone par bhi chalane ke liye:</b> <a href="https://cron-job.org" target="_blank" style={{color: '#1C83F3'}}>cron-job.org</a> par free account banayein aur apne app ke <code>/api/global-process</code> link ko har 5 minute me hit karein.</p>          </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span>
             <button 

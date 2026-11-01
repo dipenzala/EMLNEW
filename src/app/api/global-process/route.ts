@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { requireUser } from '@/lib/auth';
 import { createSupabaseAdmin } from '@/lib/supabase/server';
 import { processBatch } from '@/lib/queue';
 
@@ -8,17 +7,14 @@ export const maxDuration = 60;
 
 export async function POST() {
   try {
-    await requireUser(); 
     const admin = createSupabaseAdmin();
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     const secret = process.env.CRON_SECRET;
 
-    // AUTO-RETRY (Less than 3 attempts)
-    await admin.from('email_jobs')
-      .update({ status: 'queued', next_attempt_at: new Date().toISOString(), last_error: null })
-      .eq('status', 'failed')
-      .lt('attempts', 3);
+    // 1. Auto-Retry failed emails
+    await admin.from('email_jobs').update({ status: 'queued', next_attempt_at: new Date().toISOString(), last_error: null }).eq('status', 'failed').lt('attempts', 3);
 
+    // 2. Find all users with queued emails
     const { data: queuedJobs } = await admin.from('email_jobs').select('user_id').eq('status', 'queued').limit(100);
     const uniqueUsers = [...new Set(queuedJobs?.map(j => j.user_id) || [])];
 
@@ -30,6 +26,7 @@ export async function POST() {
       totalSent += result.sent;
       totalFailed += result.failed;
 
+      // Trigger the background drain chain (survives tab close)
       if (appUrl && secret) {
         fetch(`${appUrl}/api/drain`, {
           method: 'POST',
@@ -43,4 +40,4 @@ export async function POST() {
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}
+} 
