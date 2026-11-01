@@ -9,6 +9,7 @@ export default function DashboardPage() {
   const [statusText, setStatusText] = useState('');
   const isProcessingRef = useRef(false);
 
+  // Load Auto-Mode state on mount
   useEffect(() => {
     const savedMode = localStorage.getItem('certwinx_auto_mode');
     if (savedMode === 'true') setAutoMode(true);
@@ -25,35 +26,37 @@ export default function DashboardPage() {
     } catch (e) {}
   }
 
-  async function triggerGlobalProcess() {
+  async function triggerProcess() {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
     
-    if (!autoMode) setStatusText('Processing...');
+    if (!autoMode) setStatusText('Processing 50 emails...');
     try {
-      const r = await fetch('/api/global-process', { method: 'POST' });
+      const r = await fetch('/api/process-batch', { method: 'POST' });
       const j = await r.json();
       if (r.ok) {
-        // 🔥 FIX: Handle undefined values
-        const s = j.totalSent ?? 0;
-        const f = j.totalFailed ?? 0;
-        setStatusText(`✅ Sent: ${s} | Retried/Failed: ${f}`);
+        setStatusText(`✅ Batch Sent: ${j.sent || 0} | Failed: ${j.failed || 0}`);
         loadStats();
       } else {
         setStatusText(`❌ Error: ${j.error}`);
       }
     } catch (e) {
-      setStatusText('⚠️ Network Error (Retrying...)');
+      setStatusText('⚠️ Network Error');
     } finally {
       isProcessingRef.current = false;
     }
   }
 
+  // Auto-Mode Logic (Loop every 3 seconds)
   useEffect(() => {
     if (autoMode) {
       localStorage.setItem('certwinx_auto_mode', 'true');
-      triggerGlobalProcess();
-      const interval = setInterval(() => { triggerGlobalProcess(); }, 15000); 
+      triggerProcess(); // Trigger immediately
+      
+      const interval = setInterval(() => {
+        triggerProcess();
+      }, 3000); // 🔥 3 Seconds (Continuous sending 50 at a time)
+
       return () => clearInterval(interval);
     } else {
       localStorage.setItem('certwinx_auto_mode', 'false');
@@ -81,27 +84,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Auto-Send Control Panel */}
       <div className="card" style={{ marginBottom: 24, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Global Auto-Send & Retry</h3>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Auto-checks every 15s.</p>
+            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Bulk Auto-Send (50 per batch)</h3>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends 50 emails every 3 seconds automatically. Keep this tab open.</p>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span>
-            <button className="btn btn-primary" onClick={async () => {
-              setStatusText('⚡ Forcing all stuck emails...');
-              const r = await fetch('/api/force-send', { method: 'POST' });
-              const j = await r.json();
-              if (r.ok) {
-                setStatusText(`✅ Forced Sent: ${j.totalSent}`);
-                loadStats();
-              } else {
-                setStatusText(`❌ Error: ${j.error}`);
-              }
-            }}>⚡ Force Send</button>
+            <button className="btn btn-primary" onClick={triggerProcess}>⚡ Send 50 Now</button>
             <button className={`btn ${autoMode ? 'btn-danger' : 'btn-primary'}`} onClick={() => setAutoMode(!autoMode)}>
-              {autoMode ? '🛑 Stop Auto-Mode' : '▶ Start Auto-Mode'}
+              {autoMode ? '🛑 Stop Auto-Send' : '▶ Start Auto-Send'}
             </button>
           </div>
         </div>
