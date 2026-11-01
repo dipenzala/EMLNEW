@@ -9,7 +9,6 @@ export default function DashboardPage() {
   const [statusText, setStatusText] = useState('');
   const isProcessingRef = useRef(false);
 
-  // Load Auto-Mode state on mount
   useEffect(() => {
     const savedMode = localStorage.getItem('certwinx_auto_mode');
     if (savedMode === 'true') setAutoMode(true);
@@ -35,7 +34,10 @@ export default function DashboardPage() {
       const r = await fetch('/api/global-process', { method: 'POST' });
       const j = await r.json();
       if (r.ok) {
-        setStatusText(`✅ Sent ${j.totalSent} emails | Retried: ${j.totalFailed}`);
+        // 🔥 FIX: Handle undefined values
+        const s = j.totalSent ?? 0;
+        const f = j.totalFailed ?? 0;
+        setStatusText(`✅ Sent: ${s} | Retried/Failed: ${f}`);
         loadStats();
       } else {
         setStatusText(`❌ Error: ${j.error}`);
@@ -47,16 +49,11 @@ export default function DashboardPage() {
     }
   }
 
-  // Auto-Mode Logic (15 seconds interval)
   useEffect(() => {
     if (autoMode) {
       localStorage.setItem('certwinx_auto_mode', 'true');
       triggerGlobalProcess();
-      
-      const interval = setInterval(() => {
-        triggerGlobalProcess();
-      }, 15000); // 🔥 15 Seconds
-
+      const interval = setInterval(() => { triggerGlobalProcess(); }, 15000); 
       return () => clearInterval(interval);
     } else {
       localStorage.setItem('certwinx_auto_mode', 'false');
@@ -66,7 +63,7 @@ export default function DashboardPage() {
 
   useEffect(() => { 
     loadStats(); 
-    const t = setInterval(loadStats, 5000); 
+    const t = setInterval(loadStats, 3000); 
     return () => clearInterval(t); 
   }, []);
 
@@ -84,18 +81,15 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Auto-Send Control Panel */}
       <div className="card" style={{ marginBottom: 24, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
             <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Global Auto-Send & Retry</h3>
-<p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Sends queued emails every 15s. <b>Tab band hone par bhi chalane ke liye:</b> <a href="https://cron-job.org" target="_blank" style={{color: '#1C83F3'}}>cron-job.org</a> par free account banayein aur apne app ke <code>/api/global-process</code> link ko har 5 minute me hit karein.</p>          </div>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Auto-checks every 15s.</p>
+          </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span>
-            <button 
-              className={`btn ${autoMode ? 'btn-danger' : 'btn-primary'}`} 
-              onClick={() => setAutoMode(!autoMode)}
-            >
+            <button className={`btn ${autoMode ? 'btn-danger' : 'btn-primary'}`} onClick={() => setAutoMode(!autoMode)}>
               {autoMode ? '🛑 Stop Auto-Mode' : '▶ Start Auto-Mode'}
             </button>
           </div>
@@ -115,7 +109,7 @@ export default function DashboardPage() {
           </div>
           <div style={{ display: 'flex', gap: 20, marginTop: 15, flexWrap: 'wrap' }}>
             <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>SENDERS</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.active_senders}/{m.total_senders}</div></div>
-            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>USED</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.used_today}</div></div>
+            <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>USED TODAY</p><div style={{ fontSize: 20, fontWeight: 700 }}>{m.used_today}</div></div>
             <div><p style={{ margin: 0, fontSize: 12, color: '#A9D2F1' }}>REMAINING</p><div style={{ fontSize: 20, fontWeight: 700, color: '#86EFAC' }}>{m.remaining_today}</div></div>
           </div>
         </div>

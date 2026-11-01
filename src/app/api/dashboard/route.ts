@@ -20,7 +20,7 @@ export async function GET() {
   const { count: accepted } = await admin.from('email_jobs').select('*', { count: 'exact', head: true }).eq('status', 'accepted');
   const { count: failed } = await admin.from('email_jobs').select('*', { count: 'exact', head: true }).eq('status', 'failed');
   
-  // Count Used Today from send_events (Correct IST logic)
+  // Count Used Today properly
   const { count: usedToday } = await admin.from('send_events').select('*', { count: 'exact', head: true }).eq('kind', 'accepted').gte('created_at', todayStart);
 
   const { data: senders } = await admin.from('sender_accounts').select('daily_cap, status, paused');
