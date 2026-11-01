@@ -9,21 +9,20 @@ export async function POST() {
   try {
     const admin = createSupabaseAdmin();
     
-    // 1. FORCE RESET: Unstick any processing/failed emails immediately
+    // Force reset any stuck/failed emails
     await admin.from('email_jobs')
       .update({ status: 'queued', next_attempt_at: new Date().toISOString(), last_error: null, attempts: 0 })
       .in('status', ['processing', 'failed']);
 
-    // 2. Find all users with queued emails
-    const { data: queuedJobs } = await admin.from('email_jobs').select('user_id').eq('status', 'queued').limit(100);
+    const { data: queuedJobs } = await admin.from('email_jobs').select('user_id').eq('status', 'queued').limit(10);
     const uniqueUsers = [...new Set(queuedJobs?.map(j => j.user_id) || [])];
 
     let totalSent = 0;
     let totalFailed = 0;
 
-    // 3. Process 20 emails for each user immediately
     for (const userId of uniqueUsers) {
-      const result = await processBatch(userId, 20);
+      // 🔥 PROCESS ONLY 5 EMAILS PER CLICK (Takes ~5 seconds, safe from 10s timeout)
+      const result = await processBatch(userId, 5);
       totalSent += (result.sent || 0);
       totalFailed += (result.failed || 0);
     }

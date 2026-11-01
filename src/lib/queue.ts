@@ -55,7 +55,7 @@ export async function processBatch(userId: string, limit: number): Promise<Proce
   if (!jobs || jobs.length === 0) return result;
 
   // 🚀 20x CONCURRENCY 🚀
-  const CONCURRENCY = 3; 
+  const CONCURRENCY = 1; 
   for (let i = 0; i < jobs.length; i += CONCURRENCY) {
     const chunk = jobs.slice(i, i + CONCURRENCY);
     const outcomes = await Promise.allSettled(chunk.map((job: any) => processOne(admin, job)));
@@ -113,6 +113,7 @@ async function processOne(admin: any, job: any): Promise<'sent' | 'failed' | 'sk
     return 'sent';
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("🔥 SMTP SEND FAILED:", msg); // 🔥 THIS WILL SHOW EXACT ERROR IN VERCEL LOGS
     const isTimeout = msg.includes('timeout');
     const status = isTimeout ? 'uncertain' : 'failed';
     await admin.from('email_jobs').update({ status, last_error: msg.slice(0, 400), lease_until: null, updated_at: new Date().toISOString() }).eq('id', jobId);
