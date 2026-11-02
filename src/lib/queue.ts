@@ -55,7 +55,7 @@ export async function processBatch(userId: string, limit: number): Promise<Proce
   if (!jobs || jobs.length === 0) return result;
 
   // 🚀 20x CONCURRENCY 🚀
-  const CONCURRENCY = 2; 
+  const CONCURRENCY = 20; 
   for (let i = 0; i < jobs.length; i += CONCURRENCY) {
     const chunk = jobs.slice(i, i + CONCURRENCY);
     const outcomes = await Promise.allSettled(chunk.map((job: any) => processOne(admin, job)));

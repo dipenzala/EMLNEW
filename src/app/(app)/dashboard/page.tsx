@@ -32,7 +32,7 @@ export default function DashboardPage() {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
     
-    setStatusText('⚡ Processing emails...');
+    setStatusText('⚡ Processing 50 emails...');
     try {
       const r = await fetch('/api/process-batch', { method: 'POST' });
       const j = await r.json();
@@ -52,7 +52,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (autoMode) {
       localStorage.setItem('certwinx_auto_mode', 'true');
-      const loop = setInterval(() => { if (!isProcessingRef.current) processNow(); }, 5000);
+      // Loop triggers every 2 seconds, but won't stack if previous is still running
+      const loop = setInterval(() => { if (!isProcessingRef.current) processNow(); }, 2000);
       return () => clearInterval(loop);
     } else {
       localStorage.setItem('certwinx_auto_mode', 'false');
@@ -79,20 +80,12 @@ export default function DashboardPage() {
       <div className="card" style={{ marginBottom: 24, background: '#F8FAFC', borderColor: '#BFDBFE' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Auto-Send Control</h3>
+            <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>⚡ Ultra-Fast Auto-Send</h3>
             <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Status: <span style={{ fontWeight: 'bold', color: autoMode ? '#16A34A' : '#DC2626' }}>{statusText}</span></p>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={async () => {
-              setStatusText('Testing 1 email...');
-              const r = await fetch('/api/test-send', { method: 'POST' });
-              const j = await r.json();
-              if (r.ok) setStatusText('✅ Test Success: ' + j.message);
-              else { setStatusText('❌ Test Failed'); alert('EXACT ERROR:\n' + j.error); }
-              loadStats();
-            }}>🧪 Test 1 Email</button>
-            <button className="btn" onClick={processNow} disabled={isProcessingRef.current}>⚡ Send 10 Now</button>
-            <button className={`btn ${autoMode ? 'btn-danger' : 'btn-primary'}`} onClick={() => setAutoMode(!autoMode)}>
+            <button className="btn btn-primary" onClick={processNow} disabled={isProcessingRef.current}>⚡ Send 50 Now</button>
+            <button className={`btn ${autoMode ? 'btn-danger' : 'btn-success'}`} style={{ background: autoMode ? '' : '#16A34A', color: '#fff', border: 'none' }} onClick={() => setAutoMode(!autoMode)}>
               {autoMode ? '🛑 Stop Auto-Send' : '▶ Start Auto-Send'}
             </button>
           </div>
@@ -132,11 +125,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* LIVE DIAGNOSIS BOX */}
       <div className="card" style={{ background: '#FEF2F2', borderColor: '#FCA5A5' }}>
         <h3 style={{ margin: '0 0 10px', fontSize: 16, color: '#991B1B' }}>🚨 Live Error Diagnosis</h3>
-        <p style={{ margin: 0, fontSize: 13, color: '#7F1D1D', marginBottom: 15 }}>Exact reasons why emails are failing.</p>
-        <div className="terminal-box" style={{ height: 120, background: '#0a0a0a', border: '1px solid #333' }}>
+        <div className="terminal-box" style={{ height: 100, background: '#0a0a0a', border: '1px solid #333' }}>
           {diagnosis.length === 0 ? (
             <div style={{ color: '#00ff00' }}>No recent errors found. Emails are sending perfectly!</div>
           ) : (
